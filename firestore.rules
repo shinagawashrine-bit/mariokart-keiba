@@ -1,0 +1,8 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // マリカー競馬で使う場所だけ読み書きを許可する（URLを知っている人なら誰でも使える）
+    match /game/{doc} { allow read, write: if true; }
+    match /bets/{doc} { allow read, write: if true; }
+  }
+}

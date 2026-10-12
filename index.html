@@ -1,0 +1,1510 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>マリカー競馬</title>
+<style>html,body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+<script src="config.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="shim.js"></script>
+</head>
+<body>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@1,800&family=Noto+Sans+JP:wght@500;700;900&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+/* Layout: motorsport broadcast. Light pit-lane concrete ground, white timing panels, carbon-black header slabs, racing red as the one loud color; TV board = starting-grid lanes + timing-tower odds; phone = cockpit with black bet bar. */
+:root{
+  color-scheme: light;
+  --bg:#ecebe7;
+  --paper:#ffffff;
+  --paper2:#f4f4f1;
+  --ink:#121216;
+  --carbon:#18181d;
+  --muted:#686873;
+  --line:#d9d8d2;
+  --red:#e10600;
+  --redd:#a80400;
+  --blue:#0b5cff;
+  --green:#00a651;
+  --yellow:#ffcc00;
+  --gold:#ffcc00;
+  --goldink:#e10600;
+  --pink:#ff2d87;
+  --up:#e10600;
+  --down:#0b5cff;
+  --rainbow:linear-gradient(90deg,var(--red) 0 25%,var(--ink) 25% 50%,var(--red) 50% 75%,var(--ink) 75%);
+  --f-display:"Noto Sans JP","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+  --f-body:"Noto Sans JP","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+  --f-num:"Barlow Condensed","Noto Sans JP","Arial Narrow",system-ui,sans-serif;
+  --r:4px;
+  --cut:polygon(0 0,100% 0,calc(100% - 14px) 100%,0 100%);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  background-color:var(--bg);
+  background-image:
+    repeating-linear-gradient(-60deg,transparent 0 22px,#00000006 22px 24px),
+    linear-gradient(180deg,#f7f7f5,var(--bg) 400px);
+  color:var(--ink);font-family:var(--f-body);font-weight:700;
+  padding-inline:16px;padding-block:0 24px;
+}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+input,select{font:inherit;color:var(--ink);background:var(--paper);border:2px solid var(--ink);border-radius:3px;padding:8px 10px;min-width:0}
+h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0;text-wrap:balance;letter-spacing:.01em}
+.num{font-family:var(--f-num);font-weight:800;font-style:italic;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.muted{color:var(--muted)}
+.wrap{max-width:1500px;margin:0 auto}
+
+.checker{height:12px;background:conic-gradient(var(--ink) 25%,#fff 0 50%,var(--ink) 0 75%,#fff 0) 0 0/12px 12px}
+.rainbow{height:6px;background:repeating-linear-gradient(-60deg,var(--red) 0 18px,var(--ink) 18px 36px)}
+
+/* logo */
+.logo{display:flex;align-items:center;gap:0}
+.logo .mark{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:clamp(24px,3vw,40px);line-height:1;color:#fff;background:var(--red);padding:8px 26px 8px 16px;clip-path:var(--cut);letter-spacing:.04em}
+.logo .sub{font-family:var(--f-num);font-style:italic;font-weight:800;font-size:12px;letter-spacing:.35em;color:#fff;background:var(--ink);padding:3px 22px 3px 16px;clip-path:var(--cut);display:inline-block}
+.logo>div:last-child{display:grid;gap:3px}
+.flag{width:46px;align-self:stretch;min-height:44px;background:conic-gradient(var(--ink) 25%,#fff 0 50%,var(--ink) 0 75%,#fff 0) 0 0/11px 11px;clip-path:polygon(14px 0,100% 0,calc(100% - 14px) 100%,0 100%);margin-right:-6px}
+
+/* pills */
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 14px 4px 10px;font-weight:900;font-style:italic;font-size:13px;white-space:nowrap;background:var(--paper2);color:var(--ink);clip-path:var(--cut)}
+.st-open{background:var(--green);color:#fff}
+.st-countdown{background:var(--yellow);color:var(--ink)}
+.st-closed{background:var(--red);color:#fff}
+.st-done{background:var(--ink);color:#fff}
+.st-wait{background:#dddcd6;color:var(--muted)}
+.type-g1{background:linear-gradient(90deg,#d8a700,#ffd84a,#d8a700);color:var(--ink)}
+.type-dobe{background:#5b4632;color:#fff}
+.type-prelim{background:var(--ink);color:#fff}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.25}}
+
+.c0{--lc:var(--red);--lt:#fde8e7} .c1{--lc:var(--blue);--lt:#e6eeff} .c2{--lc:var(--green);--lt:#e3f5ea} .c3{--lc:var(--yellow);--lt:#fff6d6}
+.lanebadge{display:inline-grid;place-items:center;width:1.8em;height:1.45em;background:var(--lc);color:#fff;font-family:var(--f-num);font-weight:800;font-style:italic;font-size:1em;line-height:1;clip-path:polygon(4px 0,100% 0,calc(100% - 4px) 100%,0 100%)}
+.c3 .lanebadge,.lanebadge.c3{color:var(--ink)}
+
+.kart{width:100%;height:auto;display:block;overflow:visible}
+.coin{display:inline-block;width:.95em;height:.95em;border-radius:50%;vertical-align:-.1em;background:radial-gradient(circle at 35% 30%,#fff3b0 0 16%,#ffcc00 17% 62%,#c98f00 63%)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 22px 10px 16px;font-weight:900;font-style:italic;color:var(--ink);text-decoration:none;
+  background:var(--paper);box-shadow:inset 0 0 0 2px var(--ink);clip-path:var(--cut);transition:transform .08s,filter .08s}
+.btn:hover{filter:brightness(1.06)}
+.btn:active{transform:translateY(1px) scale(.98)}
+.btn.go{background:var(--red);color:#fff;box-shadow:none}
+.btn.red{background:var(--ink);color:#fff;box-shadow:none}
+.btn.green{background:var(--green);color:#fff;box-shadow:none}
+.btn.blue{background:var(--blue);color:#fff;box-shadow:none}
+.btn.ghost{background:transparent;box-shadow:none;text-decoration:underline;clip-path:none;padding-inline:6px}
+.btn.sm{padding:5px 16px 5px 10px;font-size:13px}
+.btn[disabled]{opacity:.35;pointer-events:none}
+
+.panel{background:var(--paper);border-radius:var(--r);box-shadow:0 1px 0 #0000000d,0 8px 24px -14px #0000004d;padding:16px;min-width:0;border-top:4px solid var(--ink)}
+.panel h2{font-size:17px;display:flex;align-items:center;gap:10px;margin:-16px -16px 14px;padding:8px 16px;background:var(--carbon);color:#fff;flex-wrap:wrap}
+.panel h2 .tag{font-family:var(--f-num);font-style:italic;font-weight:800;font-size:12px;letter-spacing:.2em;color:var(--red)}
+
+.up{color:var(--up)!important}
+.down{color:var(--down)!important}
+.up::after{content:"▲";font-size:.4em;vertical-align:super;margin-left:2px}
+.down::after{content:"▼";font-size:.4em;vertical-align:super;margin-left:2px}
+
+/* ============ MODE PICKER ============ */
+.picker{min-height:100%;display:grid;place-items:center;padding-block:40px}
+.picker .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;width:min(1180px,100%);margin-top:34px}
+@media (max-width:900px){.picker .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:480px){.picker .cards{grid-template-columns:1fr}}
+.pick{text-align:left;padding:22px 22px 24px;background:var(--paper);display:grid;gap:8px;border-left:8px solid var(--lc);box-shadow:0 8px 24px -14px #00000066;transition:transform .12s}
+.pick:hover{transform:translateX(4px)}
+.pick b{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:26px}
+.pick .k{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:14px;letter-spacing:.25em;color:var(--lc)}
+.pick.c3 .k{color:#b08a00}
+
+/* ============ BOARD ============ */
+.board{display:grid;gap:14px;padding-block:14px}
+.bhead{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px}
+.btitle{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.btitle h1{font-size:clamp(28px,3.6vw,54px);line-height:1;letter-spacing:.02em}
+.timer{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:clamp(36px,4.4vw,68px);line-height:1;padding:6px 30px 6px 20px;background:var(--carbon);color:var(--yellow);clip-path:var(--cut);font-variant-numeric:tabular-nums}
+.timer.hot{color:#fff;background:var(--red);animation:pulse .5s infinite alternate}
+@keyframes pulse{to{filter:brightness(1.25)}}
+.bmain{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:14px}
+@media (max-width:980px){.bmain{grid-template-columns:1fr}}
+.lanes{display:grid;gap:8px}
+.lane{position:relative;display:grid;grid-template-columns:auto minmax(80px,170px) minmax(0,1fr) auto;align-items:center;gap:16px;padding:8px 22px 8px 0;background:var(--paper);box-shadow:0 8px 24px -16px #00000066;overflow:hidden}
+.lane::before{content:"";position:absolute;inset:0 auto 0 0;width:44%;background:linear-gradient(90deg,var(--lt),transparent);pointer-events:none}
+.lane>*{position:relative}
+.lane .gate{align-self:stretch;display:grid;place-items:center;font-family:var(--f-num);font-weight:800;font-style:italic;font-size:clamp(40px,4.6vw,74px);width:1.5em;padding-right:.15em;background:var(--lc);color:#fff;clip-path:polygon(0 0,100% 0,78% 100%,0 100%)}
+.lane.c3 .gate{color:var(--ink)}
+.lane .who{min-width:0}
+.lane .who .nm{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:clamp(22px,2.6vw,38px);line-height:1.1;overflow-wrap:anywhere}
+.lane .who .meta{font-size:13px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;align-items:center}
+.lane .share{height:6px;background:#e7e6e1;margin-top:10px;overflow:hidden;transform:skewX(-30deg)}
+.lane .share i{display:block;height:100%;background:var(--lc);transition:width .6s}
+.lane .odds{text-align:right}
+.lane .odds .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:clamp(46px,5.6vw,92px);line-height:.9;font-variant-numeric:tabular-nums;display:inline-block}
+.lane .odds .l{font-size:11px;color:var(--muted);letter-spacing:.2em;font-style:italic}
+.ninki{display:inline-block;padding:2px 12px 2px 8px;font-weight:900;font-style:italic;font-size:12px;background:var(--paper2);color:var(--ink);clip-path:var(--cut)}
+.ninki.n1{background:var(--red);color:#fff}
+.est{opacity:.5;font-size:.42em;font-family:var(--f-body)}
+.oddsgrid{display:grid;gap:14px}
+.mx{width:100%;border-collapse:separate;border-spacing:3px;font-variant-numeric:tabular-nums}
+.mx th{font-size:12px;color:var(--muted);font-weight:900}
+.mx td{background:var(--paper2);text-align:center;padding:7px 2px;font-family:var(--f-num);font-weight:800;font-style:italic;font-size:clamp(17px,1.8vw,27px)}
+.mx td.x{background:repeating-linear-gradient(-60deg,#e3e2dc 0 4px,transparent 4px 9px)}
+.mx td.hot{background:#fff2c2;box-shadow:inset 0 -3px 0 var(--yellow)}
+.olist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px}
+.oitem{display:flex;align-items:center;justify-content:space-between;gap:6px;background:var(--paper2);padding:6px 12px 6px 8px;border-left:3px solid var(--ink)}
+.oitem .sel{display:flex;gap:3px;align-items:center;font-size:13px}
+.oitem .sel .lanebadge{font-size:13px}
+.oitem .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:clamp(18px,1.8vw,27px);display:inline-block}
+.bfoot{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch}
+@media (max-width:980px){.bfoot{grid-template-columns:1fr}}
+.qr{display:flex;gap:16px;align-items:center;background:var(--carbon);color:#fff;border-top-color:var(--red)}
+.qr .code{background:#fff;padding:8px;width:136px;height:136px;display:grid;place-items:center;flex:none}
+.qr .code img,.qr .code canvas{width:118px!important;height:118px!important}
+.qr .txt b{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:24px;display:block}
+.qr .txt .muted{color:#b9b9c2}
+.sales{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px}
+.sales div{background:var(--paper2);padding:6px 10px;border-left:3px solid var(--red)}
+.sales small{display:block;font-size:11px;color:var(--muted)}
+.sales .num{font-size:30px;line-height:1.1}
+.stand{display:grid;gap:3px;font-size:14px}
+.stand .row{display:grid;grid-template-columns:2em minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:4px 10px;background:var(--paper2)}
+.stand .row .num{font-size:20px}
+.stand .row.g1{box-shadow:inset 4px 0 0 var(--yellow)}
+.stand .row.dobe{box-shadow:inset 4px 0 0 #8a6a4b}
+
+/* overlays */
+.overlay{position:fixed;inset:0;z-index:20;background:repeating-linear-gradient(-60deg,#e10600f2 0 46px,#c40500f2 46px 92px);display:grid;place-items:center;padding:24px 16px;overflow:auto}
+.overlay .inner{width:min(1300px,100%);display:grid;gap:18px}
+.overlay .sub2{text-align:center;margin:0;font-size:18px;background:var(--carbon);color:#fff;padding:6px 26px 6px 18px;justify-self:center;clip-path:var(--cut);font-style:italic}
+.stamp{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:clamp(48px,8.5vw,132px);line-height:1;text-align:center;color:#fff;text-shadow:6px 6px 0 var(--ink);letter-spacing:.02em;animation:slam .45s cubic-bezier(.2,1.5,.4,1)}
+@keyframes slam{from{transform:translateX(-30%) skewX(-20deg);opacity:0}to{transform:none;opacity:1}}
+.bigcount{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:min(46vw,420px);line-height:1;color:#fff;text-shadow:14px 14px 0 var(--red);animation:slam .3s cubic-bezier(.2,1.5,.4,1)}
+.tickets{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+.tcard{background:var(--paper);padding:0 14px 10px;animation:pop .4s backwards;box-shadow:0 10px 30px -14px #000a}
+@keyframes pop{from{transform:translateX(-24px);opacity:0}}
+.tcard h3{font-size:20px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:0 -14px 6px;padding:8px 14px;background:var(--carbon);color:#fff}
+.tline{display:flex;align-items:center;gap:8px;justify-content:space-between;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
+.tline:first-of-type{border-top:0}
+.tline .num{font-size:20px}
+.badge{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:12px;padding:3px 12px 3px 8px;letter-spacing:.06em;clip-path:var(--cut)}
+.b-max{background:var(--yellow);color:var(--ink)}
+.b-ana{background:var(--red);color:#fff}
+.b-one{background:var(--blue);color:#fff}
+.b-hit{background:var(--green);color:#fff}
+.podium{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:end}
+@media (max-width:700px){.podium{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.pod{text-align:center;display:grid;gap:6px;justify-items:center;color:#fff}
+.pod .rk{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:clamp(34px,3.6vw,60px);line-height:1;text-shadow:4px 4px 0 var(--ink)}
+.pod .rk.r1{color:var(--yellow)} .pod .rk.r2{color:#fff} .pod .rk.r3{color:#ffb489} .pod .rk.r4{color:#ffd0cd}
+.pod .k{width:min(200px,100%);background:#fff;padding:6px 18px 4px 10px;clip-path:var(--cut)}
+.pod .nm{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:clamp(20px,2.2vw,32px);text-shadow:3px 3px 0 var(--ink)}
+.pod .block{width:100%;background:var(--carbon);background-image:repeating-linear-gradient(-60deg,transparent 0 14px,#ffffff08 14px 28px)}
+.paytable{width:100%;border-collapse:collapse;font-size:16px}
+.paytable td,.paytable th{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+.paytable th{color:var(--muted);font-weight:900;font-size:14px}
+.paytable .num{font-size:30px;text-align:right}
+.hitlist{display:flex;flex-wrap:wrap;gap:6px}
+.hit{background:var(--paper2);border-left:4px solid var(--green);padding:6px 12px;font-weight:900}
+.hit .num{color:var(--red);font-size:24px}
+.pod .hit{color:var(--ink)}
+
+/* ============ BET (phone) ============ */
+.bet{max-width:560px;margin:0 auto;display:grid;gap:10px;padding-block:14px 170px}
+.me{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--carbon);color:#fff;border-left:6px solid var(--red)}
+.me .muted{color:#a9a9b3}
+.me .btn.ghost{color:#fff}
+.me .nm{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:22px}
+.me .bal{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:36px;display:flex;align-items:center;gap:8px;color:var(--yellow)}
+.rbanner{padding:10px 14px;background:var(--paper);display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;box-shadow:0 8px 24px -16px #00000066}
+.rbanner h2{font-size:24px}
+.rbanner .t{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:36px;background:var(--carbon);color:var(--yellow);padding:0 20px 0 12px;clip-path:var(--cut)}
+.rbanner .t.hot{background:var(--red);color:#fff;animation:pulse .5s infinite alternate}
+.rcards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.rcard{padding:0 10px 8px;background:var(--paper);display:grid;gap:2px;text-align:left;position:relative;min-width:0;box-shadow:0 8px 24px -16px #00000066;border-top:5px solid var(--lc);transition:transform .1s}
+.rcard .top{display:flex;align-items:center;gap:6px;min-width:0;padding-top:8px}
+.rcard .nm{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rcard .o{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:34px;line-height:1;text-align:right}
+.rcard .kwrap{width:78%;margin:0 auto}
+.rcard.sel{background:var(--lc);color:#fff;transform:translateY(-2px)}
+.rcard.sel .muted{color:#fff}
+.rcard.c3.sel{color:var(--ink)}
+.rcard.c3.sel .muted{color:var(--ink)}
+.rcard.sel .lanebadge{background:#fff;color:var(--ink)}
+.rcard.sel .kwrap{background:#fff;padding:2px 10px;clip-path:var(--cut)}
+.rcard .pos{position:absolute;top:8px;right:8px;background:var(--carbon);color:#fff;font-family:var(--f-num);font-weight:800;font-style:italic;font-size:16px;padding:2px 14px 2px 8px;clip-path:var(--cut);z-index:1}
+.tabs{display:flex;gap:4px;overflow-x:auto;padding-bottom:4px}
+.tab{flex:1 0 auto;padding:8px 18px 8px 12px;font-weight:900;font-style:italic;background:var(--paper);white-space:nowrap;clip-path:var(--cut);text-align:left}
+.tab.on{background:var(--red);color:#fff}
+.tab small{display:block;font-size:10px;font-weight:700;color:var(--muted);font-style:normal}
+.tab.on small{color:#ffd6d4}
+.hint{font-size:12px;color:var(--muted);text-align:center;margin:0}
+.betbar{position:fixed;left:0;right:0;bottom:0;z-index:10;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));background:var(--carbon);color:#fff;border-top:4px solid var(--red)}
+.betbar .muted{color:#a9a9b3}
+.betbar .hint{color:#a9a9b3}
+.betbar .in{max-width:560px;margin:0 auto;display:grid;gap:8px}
+.betbar .row1{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.betbar .selv{display:flex;gap:4px;align-items:center;font-weight:900;font-style:italic;flex-wrap:wrap}
+.betbar .ov{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:38px;line-height:1;color:var(--yellow)}
+.betbar .row2{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.betbar .row2 .go{flex:1 1 140px;font-size:20px!important}
+.betbar .btn.sm{background:#2c2c33;color:#fff;box-shadow:none}
+.amt{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.amt .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:36px;min-width:1.8em;text-align:center;line-height:1}
+.betbar .num[style]{color:var(--yellow)!important}
+.mytix{display:grid;gap:4px}
+.mytix .tl{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--paper);padding:8px 12px;border-left:4px solid var(--ink)}
+.mytix .tl .num{font-size:20px}
+.cheer{text-align:center;padding:22px 16px;background:var(--paper);border-top:5px solid var(--red);box-shadow:0 8px 24px -16px #00000066}
+.cheer h2{font-size:34px;margin-block:6px}
+.claim{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.claim button{padding:16px 12px;background:var(--paper);font-family:var(--f-display);font-weight:900;font-style:italic;font-size:19px;overflow-wrap:anywhere;text-align:left;border-left:5px solid var(--red);box-shadow:0 8px 24px -16px #00000066}
+
+/* ============ ADMIN ============ */
+.admin{display:grid;gap:14px;padding-block:14px}
+.agrid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:1000px){.agrid{grid-template-columns:1fr}}
+.acol{display:grid;gap:14px;min-width:0}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tbl th,.tbl td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.tbl th{font-size:12px;color:var(--muted);font-weight:900}
+.tbl .r{text-align:right}
+.tbl .num{font-size:22px!important}
+.scroll{overflow-x:auto}
+.mini{width:72px}
+.orderpick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.orderpick button{padding:10px 6px;background:var(--lt);border-top:4px solid var(--lc);display:grid;gap:4px;justify-items:center;position:relative;font-weight:900;font-style:italic}
+.orderpick button .pos{position:absolute;top:4px;right:4px;background:var(--carbon);color:#fff;font-family:var(--f-num);font-weight:800;font-style:italic;padding:1px 10px 1px 6px;font-size:14px;clip-path:var(--cut)}
+.racelist{display:grid;gap:3px}
+.racelist .ri{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 10px;background:var(--paper2);font-size:14px}
+.racelist .ri .num{font-size:18px}
+.racelist .ri.cur{background:#fff2c2;box-shadow:inset 4px 0 0 var(--red)}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.formgrid label{display:grid;gap:4px;font-size:12px;color:var(--muted);font-weight:900}
+.warn{background:#fde8e7;border-left:4px solid var(--red);padding:10px 12px;font-size:14px}
+.note{background:#fff6d6;border-left:4px solid var(--yellow);padding:10px 12px;font-size:14px}
+.toast{position:fixed;left:50%;bottom:calc(180px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:50;background:var(--red);color:#fff;font-weight:900;font-style:italic;padding:10px 26px 10px 18px;clip-path:var(--cut);animation:pop .25s;max-width:calc(100% - 32px);text-align:center}
+.topnav{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding-top:14px}
+.topnav .links{display:flex;gap:6px;flex-wrap:wrap}
+
+/* ===== G1: gold, flashy ===== */
+body[data-race="g1"]{background-color:#f6f0dc;background-image:repeating-conic-gradient(from 0deg at 50% -20%,#e9c75a2e 0 5deg,transparent 5deg 10deg),linear-gradient(180deg,#fff8de,#efe5c4 700px)}
+body[data-race="g1"] .logo .mark{background:linear-gradient(100deg,#9c7000,#ffd84a 35%,#fff6c9 50%,#ffd84a 65%,#9c7000);background-size:200% 100%;color:var(--ink);animation:shine 3s linear infinite}
+body[data-race="g1"] .btitle h1,body[data-race="g1"] .rbanner h2{background:linear-gradient(100deg,#7a5600,#d9a300 30%,#fff0a8 50%,#d9a300 70%,#7a5600);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 3s linear infinite;padding-right:.1em}
+@keyframes shine{to{background-position:-200% 0}}
+body[data-race="g1"] .panel{border-top-color:#d4a017}
+body[data-race="g1"] .panel h2{background:linear-gradient(90deg,#18181d 55%,#4a3800)}
+body[data-race="g1"] .panel h2 .tag{color:#ffd84a}
+body[data-race="g1"] .rainbow{background:repeating-linear-gradient(-60deg,#d4a017 0 18px,var(--ink) 18px 36px)}
+body[data-race="g1"] .timer,body[data-race="g1"] .rbanner .t{color:#ffd84a}
+body[data-race="g1"] .lane{box-shadow:0 0 0 3px #d4a017,0 12px 30px -14px #9c7000}
+body[data-race="g1"] .rcard{box-shadow:0 0 0 2px #d4a017,0 8px 24px -16px #9c7000}
+body[data-race="g1"] .me{border-left-color:#d4a017}
+body[data-race="g1"] .betbar{border-top-color:#d4a017}
+body[data-race="g1"] .checker{background:conic-gradient(var(--ink) 25%,#ffd84a 0 50%,var(--ink) 0 75%,#ffd84a 0) 0 0/12px 12px}
+.ov-g1{background:repeating-linear-gradient(-60deg,#e2ad00f5 0 46px,#c99600f5 46px 92px)}
+.ov-g1 .stamp{color:#fff;text-shadow:6px 6px 0 #5e4100}
+.ov-g1 .pod .block{background:#2a2108;background-image:repeating-linear-gradient(-60deg,transparent 0 14px,#ffd84a14 14px 28px)}
+.gp-top{font-family:var(--f-num);font-style:italic;font-weight:800;letter-spacing:.5em;text-align:center;font-size:clamp(16px,2vw,30px);color:var(--ink)}
+.g1stamp{font-family:var(--f-num)!important;font-weight:800;font-size:clamp(72px,13vw,220px)!important}
+.champ{text-align:center;font-family:var(--f-display);font-weight:900;font-style:italic;font-size:clamp(28px,4vw,58px);color:var(--ink)}
+.confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.overlay .inner{position:relative}
+.cf{position:absolute;top:-30px;width:10px;height:18px;animation:fall linear infinite}
+@keyframes fall{to{transform:translateY(115vh) rotate(760deg)}}
+.introgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:700px){.introgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ic{background:var(--paper);padding:10px 12px 12px;display:grid;gap:4px;justify-items:center;animation:pop .5s backwards;border-top:5px solid var(--lc)}
+.ic .nm{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:clamp(20px,2.2vw,32px)}
+.ic .rk{font-size:13px;color:var(--muted)}
+.ic .k{width:min(170px,100%)}
+
+/* ===== D1: dark, gloomy ===== */
+body[data-race="dobe"]{--bg:#0d0d11;--paper:#1a1a21;--paper2:#24242c;--ink:#e2e2ea;--muted:#8a8a98;--line:#34343e;--carbon:#060608;--red:#a3121f;--goldink:#ff5a68;color-scheme:dark;
+  background-color:#0d0d11;background-image:radial-gradient(ellipse at 50% -10%,#3a1424aa,transparent 55%),repeating-linear-gradient(-60deg,transparent 0 22px,#ffffff05 22px 24px),linear-gradient(180deg,#121218,#0b0b0e)}
+body[data-race="dobe"] .c0{--lt:#3a1418} body[data-race="dobe"] .c1{--lt:#152039} body[data-race="dobe"] .c2{--lt:#122d1e} body[data-race="dobe"] .c3{--lt:#383010}
+body[data-race="dobe"] .logo .mark{background:#3a0d14;color:#b9b9c6}
+body[data-race="dobe"] .btitle h1,body[data-race="dobe"] .rbanner h2{color:#c4c4d0;animation:flicker 5s infinite}
+@keyframes flicker{0%,90%,100%{opacity:1}91%{opacity:.35}93%{opacity:.9}94%{opacity:.25}96%{opacity:1}}
+body[data-race="dobe"] .lane .gate,body[data-race="dobe"] .lanebadge{filter:saturate(.55) brightness(.8)}
+body[data-race="dobe"] .kart{filter:saturate(.5) brightness(.8)}
+body[data-race="dobe"] .rainbow{background:repeating-linear-gradient(-60deg,#4a0e18 0 18px,#060608 18px 36px)}
+body[data-race="dobe"] .checker{opacity:.3}
+body[data-race="dobe"] .timer,body[data-race="dobe"] .rbanner .t{color:#ff4d5e}
+body[data-race="dobe"] .panel,body[data-race="dobe"] .lane,body[data-race="dobe"] .rcard{box-shadow:0 10px 30px -12px #000}
+body[data-race="dobe"] .mx td.hot{background:#3a2a10}
+body[data-race="dobe"] .stand .row.g1{background:#2e2914}
+body[data-race="dobe"] .me .bal,body[data-race="dobe"] .betbar .ov{color:#ff5a68}
+.ov-dobe{background:radial-gradient(ellipse at 50% 30%,#2b0f19f7,#050507fa 70%)}
+.ov-dobe .stamp{color:#d2d2dc;text-shadow:5px 5px 0 #7a0d1a;animation:slam .45s cubic-bezier(.2,1.5,.4,1),shake .12s .5s 4}
+.ov-dobe .gp-top{color:#8a8a98}
+.ov-dobe .pod .rk.r1{color:#d2d2dc}
+.ov-dobe .pod .block{background:#15151b}
+.ov-dobe .pod .k{background:#2a2a33}
+body[data-race="dobe"] .mx td.x{background:repeating-linear-gradient(-60deg,#2e2e37 0 4px,transparent 4px 9px)}
+body[data-race="dobe"] .qr .code{background:#fff}
+.dobestamp{font-family:var(--f-num)!important;font-weight:800;font-size:clamp(100px,17vw,280px)!important}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.loser{display:flex;align-items:center;gap:24px;justify-self:center;padding:14px 44px;background:radial-gradient(ellipse at center,#ffffff26,transparent 70%)}
+.loser .k{width:min(200px,40vw);filter:grayscale(.75) brightness(.9)}
+.loser .lbl{font-family:var(--f-num);font-style:italic;font-weight:800;letter-spacing:.3em;color:#ff4d5e;font-size:18px}
+.loser .nm{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:clamp(40px,6vw,88px);color:#fff;line-height:1.05}
+.b-self{background:#7a0d1a;color:#fff}
+.form{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);flex-wrap:wrap;margin-top:6px}
+.form b{color:var(--ink)}
+.fms{display:inline-flex;gap:2px}
+.fm{display:inline-grid;place-items:center;width:1.55em;height:1.55em;font-family:var(--f-num);font-style:italic;font-weight:800;font-size:12px;background:var(--paper2);color:var(--ink)}
+.fm.f1{background:var(--yellow);color:#18181d}
+.fm.f2{background:#c9ccd6;color:#18181d}
+.fm.f4{background:var(--carbon);color:#fff}
+.rcard .form{margin-top:0;font-size:11px}
+.rcard.sel .form,.rcard.sel .form b{color:inherit}
+.roster{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:12px;padding:10px;background:var(--paper2)}
+.rchip{display:inline-flex;align-items:stretch;background:var(--paper);box-shadow:inset 0 0 0 2px var(--ink)}
+.rchip button{padding:5px 10px;font-weight:900;font-style:italic}
+.rchip button+button{padding:5px 8px;color:var(--muted);border-left:2px solid var(--ink)}
+.rchip button.warn2{color:#fff;background:var(--red)}
+.btabs{display:grid;grid-template-columns:1fr 1fr auto;gap:0;background:var(--carbon)}
+.btabs button{padding:10px;font-weight:900;font-style:italic;color:#a9a9b3}
+.btabs button.on{background:var(--red);color:#fff;clip-path:var(--cut)}
+.mstats{display:grid;gap:4px}
+.ms{background:var(--paper);padding:10px 12px;border-left:4px solid var(--line);display:grid;gap:6px}
+.ms.top{border-left-color:var(--yellow)}
+.ms1{display:flex;align-items:center;gap:8px}
+.ms1 .rk{font-size:22px;width:1.4em}
+.ms1 .nm{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:18px}
+.ms1 .pr{margin-left:auto;font-size:22px}
+.ms2{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
+.ms2 b{color:var(--ink)}
+.urls{display:grid;gap:8px}
+.final{background:var(--carbon);color:#fff;padding:14px 16px;display:grid;gap:4px;border-left:6px solid var(--yellow)}
+.final .ft{font-weight:900;font-style:italic;color:var(--yellow);font-size:14px}
+.final .fv{font-weight:900}
+.final .fv .num{font-size:52px;line-height:1;color:#fff}
+.final .fs{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:13px;color:#b9b9c2}
+.final .fs b{font-family:var(--f-num);font-style:italic;font-size:24px}
+.final .plus{color:#3ee08a}.final .minus{color:#ff6b6b}
+.fire{display:inline-block;padding:1px 8px;background:#ff5a00;color:#fff;font-weight:900;font-style:italic;font-size:12px;clip-path:var(--cut);white-space:nowrap}
+.mks{font-weight:900;color:var(--ink);font-size:13px}
+.ninki.honmei{background:var(--carbon);color:var(--yellow)}
+.mpanel{background:var(--paper);padding:10px 12px;display:grid;gap:6px}
+.mpanel .mt{font-weight:900;font-style:italic;font-size:14px}
+.mpanel .mt .muted{font-weight:700;font-style:normal;font-size:11px}
+.mrow{display:grid;grid-template-columns:3.6em repeat(4,minmax(0,1fr));gap:4px;align-items:center}
+.mrow .mk{font-size:22px;font-weight:900;line-height:1;display:flex;align-items:baseline;gap:3px}
+.mrow .mk small{font-size:10px;color:var(--muted)}
+.mbtn{padding:7px 0;font-family:var(--f-num);font-weight:800;font-style:italic;font-size:18px;background:var(--paper2);border-top:3px solid var(--lc)}
+.mbtn.on{background:var(--lc);color:#fff}
+.mbtn.c3.on{color:#18181d}
+.awards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.award{background:var(--paper);padding:16px 18px 18px;display:grid;gap:4px;text-align:center;border-top:6px solid var(--red);box-shadow:0 14px 30px -14px #000a;animation:awardIn .7s cubic-bezier(.2,1.5,.4,1) backwards}
+.award.gold{border-top-color:#d4a017;background:linear-gradient(180deg,#fff8dc,#fff)}
+@keyframes awardIn{from{opacity:0;transform:translateY(40px) scale(.8)}}
+.award .at{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:clamp(22px,2.4vw,34px);color:var(--red)}
+.award.gold .at{color:#9c7000}
+.award .ad{font-size:12px;color:var(--muted)}
+.award .an{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:clamp(30px,3.6vw,52px);line-height:1.1;margin-top:6px}
+.award .av{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:20px}
+.htot{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.htot div{background:var(--paper2);padding:6px 10px;border-left:3px solid var(--ink)}
+.htot small{display:block;font-size:11px;color:var(--muted)}
+.htot .num{font-size:24px}
+.url{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;background:var(--paper2)}
+.url>div{min-width:0}
+.url code{display:block;font-size:12px;overflow-wrap:anywhere;user-select:all;margin-top:4px}
+.sndbtn{padding:8px 16px 8px 12px;font-weight:900;font-style:italic;font-size:13px;background:#2c2c33;color:#a9a9b3;clip-path:var(--cut);white-space:nowrap}
+.sndbtn.on{background:var(--yellow);color:#18181d}
+.lane .gate small{font-size:.42em;margin-left:.04em}
+.pbig{display:flex;align-items:center;justify-content:center;gap:12px;margin:6px auto 2px;padding:6px 26px 6px 18px;background:var(--lc);color:#fff;clip-path:var(--cut);width:max-content;max-width:100%}
+.pbig.c3{color:#18181d}
+.pbig b{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:56px;line-height:1}
+.pbig span{font-weight:900;font-style:italic;font-size:15px}
+.nextup{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--yellow);color:#18181d;font-weight:900;font-style:italic}
+.nextup b{font-family:var(--f-num);font-size:30px;line-height:1}
+.ov-win{background:repeating-conic-gradient(from 0deg at 50% 40%,#ffcc00f7 0 10deg,#ffb000f7 10deg 20deg);cursor:pointer}
+.ov-win .stamp{color:#fff;text-shadow:6px 6px 0 #18181d}
+.ov-win .gp-top{color:#18181d}
+.bigwin{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:min(30vw,200px);line-height:1;text-align:center;color:#18181d;text-shadow:5px 5px 0 #fff;animation:slam .5s .2s cubic-bezier(.2,1.5,.4,1) backwards}
+.cel-close{text-align:center;color:#18181d;font-weight:900;margin:0}
+.ov-dobe .cel-close{color:#8a8a98}
+.cf.coinf{border-radius:50%;width:16px!important;height:16px;background:radial-gradient(circle at 35% 30%,#fff3b0 0 16%,#ffcc00 17% 62%,#c98f00 63%)!important}
+.stats{display:grid;gap:14px;padding-block:14px}
+.stbl{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+.stbl th,.stbl td{padding:8px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.stbl th:first-child,.stbl td:first-child{text-align:left}
+.stbl th{font-size:12px;color:var(--muted);font-weight:900}
+.stbl .num{font-size:20px}
+.stbl .rk1{background:#fff6d6}
+.plus{color:var(--green)} .minus{color:var(--red)}
+.selfbet .row .num{font-size:36px}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.confetti{display:none}}
+</style>
+
+<div id="app"></div>
+<div id="ov"></div>
+<div id="toast"></div>
+
+<script>
+/* ---------------- constants ---------------- */
+const BASE_URL = window.MK_WEB ? location.origin+location.pathname : "https://claude.ai/artifact/Ug3DgvUgKsvgAscixb5he2";
+const BET_URL = BASE_URL+"#bet";
+const MK = {
+  win:{label:"単勝", n:1, ordered:true, help:"1着を当てる"},
+  ex:{label:"連単", n:2, ordered:true, help:"1着→2着を順番どおり"},
+  qu:{label:"連複", n:2, ordered:false, help:"1・2着を順不同"},
+  tri:{label:"3連複", n:3, ordered:false, help:"上位3人を順不同（＝ドベ当て）"},
+  t3:{label:"3連単", n:3, ordered:true, help:"1→2→3着を順番どおり", finals:true},
+};
+const MORDER = ["win","ex","qu","tri","t3"];
+const DEFAULT_SETTINGS = {
+  rates:{win:80, ex:75, qu:75, tri:75, t3:70},
+  seed:{ex:50, qu:50, tri:50, t3:50},
+  caps:{win:0, ex:100, qu:100, tri:100, t3:50, self:50},
+  countdown:60,
+  prizes:{prelim:[10,5], g1:[15,10], dobe:[5]},
+  virtual:30,
+  unit:10,
+  yen:10,
+};
+const POINTS = [4,3,2,1];
+const TYPE_LABEL = {prelim:"予選", g1:"G1 グランプリ", dobe:"D1 ドベ決定戦"};
+const STATUS_LABEL = {wait:"待機", open:"受付中", countdown:"締切まもなく", closed:"締切", done:"確定"};
+const CIRC = ["①","②","③","④"];
+
+/* ---------------- state ---------------- */
+const S = {
+  db:null, user:null, uid:null, isOwner:false, ready:false, noDb:false,
+  state:null, ledger:null, bets:{}, roster:null, history:null, ps:{},
+  ui:{ m:"win", sel:[], amt:10, order:[], form:{}, proxyMember:"", pm:"win", psel:[], pamt:10, confirm:null, perPerson:null, claimOpen:false },
+  prevOdds:{}, flash:{}, closing:false, lastOverlayKey:"",
+};
+function defaultState(){ return {members:[], races:[], cur:-1, settings:clone(DEFAULT_SETTINGS), gameId:rid()}; }
+function settings(){ const s=(S.state&&S.state.settings)||{}; return deepMerge(clone(DEFAULT_SETTINGS), s); }
+
+/* ---------------- utils ---------------- */
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function deepMerge(a,b){ for(const k in b){ if(b[k]&&typeof b[k]==="object"&&!Array.isArray(b[k])&&a[k]&&typeof a[k]==="object"&&!Array.isArray(a[k])) deepMerge(a[k],b[k]); else a[k]=b[k]; } return a; }
+function rid(){ return Math.random().toString(36).slice(2,10); }
+function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function fl(x){ return Math.floor(x*10+1e-9)/10; }
+function fmtO(v){ return v>=100 ? Math.floor(v).toString() : v.toFixed(1); }
+function now(){ return Date.now(); }
+function members(){ return (S.state&&S.state.members)||[]; }
+function active(){ return members().filter(m=>!m.left); }
+function mem(id){ return members().find(m=>m.id===id); }
+function mname(id){ return (mem(id)||{}).name || "?"; }
+function races(){ return (S.state&&S.state.races)||[]; }
+function curRace(){ const r=races(); return S.state && S.state.cur>=0 ? r[S.state.cur] : null; }
+function raceTitle(r){ return r.type==="prelim" ? `第${r.no}R 予選` : TYPE_LABEL[r.type]; }
+function laneIdx(r,id){ return r.runners.indexOf(id); }
+function roster(){ return (S.roster&&S.roster.players)||[]; }
+function pname(id){ const m=mem(id); if(m) return m.name; const p=roster().find(x=>x.id===id); return p?p.name:"?"; }
+function pstats(gid){
+  const st={}, get=id=>st[id]||(st[id]={id,runs:0,ranks:[0,0,0,0],g1:0,d1:0,pl:0,recent:[]});
+  ((S.history&&S.history.races)||[]).filter(x=>!gid||x.gid===gid).slice().sort((a,b)=>a.t-b.t).forEach(x=>{
+    x.order.forEach((id,i)=>{ const s=get(id); s.runs++; s.ranks[i]++; s.recent.push(i+1); if(x.type==="g1"&&i===0) s.g1++; if(x.type==="dobe"&&i===x.order.length-1) s.d1++; });
+    for(const [id,v] of Object.entries(x.pl||{})) get(id).pl+=v;
+  });
+  return st;
+}
+function pct(a,b){ return b? Math.round(a/b*100) : 0; }
+function recentHtml(s,n){ return `<span class="fms">${s.recent.slice(-n).map(x=>`<span class="fm f${x}">${x}</span>`).join("")}</span>`; }
+function formHtml(id){
+  const s=S.ps[id]; if(!s||!s.runs) return `<div class="form"><b>初出走</b></div>`;
+  return `<div class="form"><span>通算 <b>${s.runs}戦${s.ranks[0]}勝</b></span><span>勝率 <b>${pct(s.ranks[0],s.runs)}%</b></span><span>前走 <b>${s.recent[s.recent.length-1]}着</b></span>${recentHtml(s,5)}${s.g1?`<span class="ninki n1">G1×${s.g1}</span>`:""}</div>`;
+}
+function streak(id){
+  let n=0; races().filter(r=>r.settle&&r.settle.order.includes(id)).forEach(r=>{ n = r.settle.order[0]===id ? n+1 : 0; }); return n;
+}
+function fire(id){ const n=streak(id); return n>=2 ? `<span class="fire">🔥${n}連勝中</span>` : ""; }
+function marksAgg(r){
+  const agg={}; r.runners.forEach(id=>agg[id]={h:0,t:0,a:0,pts:0});
+  Object.values(S.bets).forEach(d=>{ const mk=d.marks&&d.marks[r.id]; if(!mk||!d.member||r.runners.includes(d.member)) return;
+    [["h",3],["t",2],["a",1]].forEach(([k,p])=>{ const id=mk[k]; if(agg[id]){ agg[id][k]++; agg[id].pts+=p; } }); });
+  let top=null; r.runners.forEach(id=>{ if(agg[id].pts && (!top||agg[id].pts>agg[top].pts)) top=id; });
+  return {agg, top};
+}
+function awards(){
+  const gid=S.state.gameId, bal=balances(), given={};
+  ((S.ledger&&S.ledger.entries)||[]).filter(e=>e.gameId===gid).forEach(e=>given[e.member]=(given[e.member]||0)+e.amt);
+  const net=members().map(m=>({id:m.id, v:(bal[m.id]||0)-(given[m.id]||0)})).sort((a,b)=>b.v-a.v);
+  const hits={}, pays={}; let ana=null;
+  races().forEach(r=>{ if(!r.settle) return; raceTickets(r).forEach(t=>{ const p=ticketPay(r,t); if(!p) return;
+    hits[t.member]=(hits[t.member]||0)+1; pays[t.member]=(pays[t.member]||0)+p;
+    const v=r.settle.winOdds[t.m].v; if(!ana||v>ana.v||(v===ana.v&&p>ana.pay)) ana={id:t.member, v, m:t.m, pay:p, r, sel:t.sel}; }); });
+  const hk=Object.keys(hits).sort((a,b)=>hits[b]-hits[a]||pays[b]-pays[a]);
+  const g1=races().find(r=>r.type==="g1"&&r.settle);
+  return { mvp:net[0]||null, hit:hk[0]?{id:hk[0], n:hits[hk[0]], pay:pays[hk[0]]}:null, ana, g1:g1?g1.settle.order[0]:null };
+}
+function dayOver(){
+  const rs=races(); if(!rs.length||!rs.every(r=>r.status==="done")) return false;
+  const F=finalsOn(); return rs.some(r=>r.type!=="prelim") || (!F.g1&&!F.dobe) || !!S.state.ceremony;
+}
+function finalRows(){
+  const gid=S.state.gameId, bal=balances(), given={};
+  ((S.ledger&&S.ledger.entries)||[]).filter(e=>e.gameId===gid).forEach(e=>given[e.member]=(given[e.member]||0)+e.amt);
+  return members().map(m=>({id:m.id, given:given[m.id]||0, bal:bal[m.id]||0, net:(bal[m.id]||0)-(given[m.id]||0)})).sort((a,b)=>b.net-a.net||b.bal-a.bal);
+}
+function finalCard(me){
+  if(!dayOver()) return "";
+  const rows=finalRows(), i=rows.findIndex(x=>x.id===me), x=rows[i]; if(!x) return "";
+  return `<div class="final"><div class="ft">本日の最終ポイント</div><div class="fv"><span class="num">${x.bal}</span>枚</div>
+    <div class="fs"><span>配られた ${x.given}枚</span><b class="${x.net>0?"plus":x.net<0?"minus":""}">${x.net>0?"+":""}${x.net}</b><span>${i+1}位 / ${rows.length}人</span></div></div>`;
+}
+function adminFinal(){
+  const rows=finalRows(); if(!rows.length||!races().length) return "";
+  const over=dayOver();
+  return `<div class="panel"><h2>${over?"本日の最終ポイント":"現在のポイント"} <span class="tag">${over?"FINAL":"NOW"}</span></h2><div class="scroll"><table class="stbl"><tr><th>順位</th><th style="text-align:left">名前</th><th>配られた</th><th>${over?"最終":"現在"}</th><th>増減</th></tr>
+    ${rows.map((x,i)=>`<tr class="${i===0?"rk1":""}"><td class="num">${i+1}</td><td style="text-align:left"><b>${esc(mname(x.id))}</b>${(mem(x.id)||{}).left?' <span class="muted" style="font-size:11px">離脱</span>':""}</td><td class="num">${x.given}</td><td class="num">${x.bal}</td><td class="num ${x.net>0?"plus":x.net<0?"minus":""}">${x.net>0?"+":""}${x.net}</td></tr>`).join("")}</table></div></div>`;
+}
+function ceremonyHtml(){
+  const A=awards(), cards=[];
+  if(A.mvp) cards.push(["MVP","今日いちばんチップを増やした人",A.mvp.id,`${A.mvp.v>0?"+":""}${A.mvp.v}枚`]);
+  if(A.hit) cards.push(["的中王","当てた回数がいちばん多い人",A.hit.id,`${A.hit.n}回的中（払戻${A.hit.pay}枚）`]);
+  if(A.ana) cards.push(["大穴賞","いちばん高い倍率を当てた人",A.ana.id,`${MK[A.ana.m].label} ${fmtO(A.ana.v)}倍（${esc(raceTitle(A.ana.r))}）`]);
+  if(A.g1) cards.push(["G1チャンピオン","グランプリ優勝",A.g1,"GRAND PRIX WINNER"]);
+  const body=cards.map(([t,d,id,v],i)=>`<div class="award ${t==="G1チャンピオン"?"gold":""}" style="animation-delay:${1+i*2.6}s"><div class="at">${t}</div><div class="ad">${d}</div><div class="an">${esc(mname(id))}</div><div class="av">${v}</div></div>`).join("");
+  return `<div class="overlay ov-g1">${confetti(80)}<div class="inner"><div class="gp-top">AWARDS</div><div class="stamp">本日の表彰式</div><div class="awards">${body||'<p class="sub2">記録がありません</p>'}</div></div></div>`;
+}
+function houseRows(){
+  return races().filter(r=>r.settle).map(r=>{ const s=r.settle, pt=s.poolTotals||{}, payM={};
+    s.hits.forEach(x=>payM[x.m]=(payM[x.m]||0)+x.pay);
+    const win=(pt.win||0)-(payM.win||0), ex=Object.keys(pt).filter(m=>m!=="win").reduce((a,m)=>a+(pt[m]||0)-(payM[m]||0),0);
+    const prize=Object.values(s.prizes).reduce((a,b)=>a+b,0);
+    return {r, sales:s.sales, win, ex, prize, house:s.house}; });
+}
+function adminHouse(){
+  const rows=houseRows(); if(!rows.length) return "";
+  const sum=k=>rows.reduce((a,x)=>a+x[k],0), sg=v=>`<span class="${v>0?"plus":v<0?"minus":""}">${v>0?"+":""}${v}</span>`;
+  return `<div class="panel"><h2>胴元の収支 <span class="tag">HOUSE</span></h2>
+    <div class="htot"><div><small>合計収支</small><span class="num">${sg(sum("house"))}</span></div><div><small>1レース平均</small><span class="num">${sg(Math.round(sum("house")/rows.length))}</span></div><div><small>売上合計</small><span class="num">${sum("sales")}</span></div><div><small>赤字レース</small><span class="num">${rows.filter(x=>x.house<0).length}/${rows.length}</span></div></div>
+    <div class="scroll"><table class="stbl" style="margin-top:10px"><tr><th>レース</th><th>売上</th><th>単勝の利益</th><th>連系の利益</th><th>賞金</th><th>収支</th></tr>
+    ${rows.map(x=>`<tr><td><b>${esc(raceTitle(x.r))}</b></td><td class="num">${x.sales}</td><td class="num">${sg(x.win)}</td><td class="num">${sg(x.ex)}</td><td class="num">-${x.prize}</td><td class="num">${sg(x.house)}</td></tr>`).join("")}
+    <tr style="border-top:2px solid var(--ink)"><td><b>合計</b></td><td class="num">${sum("sales")}</td><td class="num">${sg(sum("win"))}</td><td class="num">${sg(sum("ex"))}</td><td class="num">-${sum("prize")}</td><td class="num">${sg(sum("house"))}</td></tr></table></div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">連系＝連単・連複・3連複・3連単。連系がマイナスなら見せ金のぶん胴元が負けたレース。管理画面にだけ表示されます。</p></div>`;
+}
+function formMini(id){
+  const s=S.ps[id]; if(!s||!s.runs) return `<div class="form">初出走${fire(id)}</div>`;
+  return `<div class="form">勝率<b>${pct(s.ranks[0],s.runs)}%</b>・前走<b>${s.recent[s.recent.length-1]}着</b>${fire(id)}</div>`;
+}
+function marketsFor(r){ return MORDER.filter(m=>!MK[m].finals || r.type!=="prelim"); }
+function keyOf(m,sel){ return MK[m].ordered ? sel.join(">") : sel.slice().sort().join("+"); }
+function perms(arr,k){ if(k===0) return [[]]; const out=[]; arr.forEach((x,i)=>perms(arr.filter((_,j)=>j!==i),k-1).forEach(p=>out.push([x,...p]))); return out; }
+function combs(arr,k){ if(k===0) return [[]]; if(arr.length<k) return []; const [h,...t]=arr; return [...combs(t,k-1).map(c=>[h,...c]), ...combs(t,k)]; }
+function harv(p,perm){ let x=1, rem=1; for(const r of perm){ x*=p[r]/rem; rem-=p[r]; } return x; }
+function isLive(r){ return r && (r.status==="open" || (r.status==="countdown" && now() < r.closeAt)); }
+function remain(r){ return r && r.status==="countdown" ? Math.max(0, Math.ceil((r.closeAt-now())/1000)) : null; }
+function unit(){ return Math.max(1,settings().unit||1); }
+function clampAmt(a,max){ const U=unit(); let v=Math.max(U,Math.floor(a/U)*U); const mU=Math.floor(max/U)*U; if(mU>=U) v=Math.min(v,mU); return v; }
+function amtButtons(v){ const U=unit(); return `<div class="amt"><button class="btn sm" data-act="amt" data-d="${-U}">−${U}</button><span class="v">${v}</span><button class="btn sm" data-act="amt" data-d="${U}">+${U}</button><button class="btn sm" data-act="amt" data-d="${U*5}">+${U*5}</button><button class="btn sm" data-act="amt" data-d="${U*10}">+${U*10}</button></div>`; }
+function mmss(s){ return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; }
+
+/* ---------------- tickets / money ---------------- */
+function allTickets(){
+  const out=[];
+  for(const [docId,d] of Object.entries(S.bets)){
+    (d.tickets||[]).forEach(t=>out.push({...t, doc:docId}));
+  }
+  return out;
+}
+function validFor(r,t){
+  if(!r || t.race!==r.id || r.status==="wait") return false;
+  if(r.closeAt && t.t > r.closeAt + 1500) return false;
+  if(r.runners.includes(t.member) && !(t.m==="win" && t.sel[0]===t.member)) return false;
+  return true;
+}
+function raceTickets(r){ return r ? allTickets().filter(t=>validFor(r,t)) : []; }
+function balances(){
+  const b={}; members().forEach(m=>b[m.id]=0);
+  ((S.ledger&&S.ledger.entries)||[]).forEach(e=>{ if(e.gameId===S.state.gameId && b[e.member]!==undefined) b[e.member]+=e.amt; });
+  const byId={}; races().forEach(r=>byId[r.id]=r);
+  allTickets().forEach(t=>{ const r=byId[t.race]; if(r && validFor(r,t) && b[t.member]!==undefined) b[t.member]-=t.amt; });
+  races().forEach(r=>{ if(r.settle){ for(const [m,a] of Object.entries(r.settle.payouts||{})) if(b[m]!==undefined) b[m]+=a; for(const [m,a] of Object.entries(r.settle.prizes||{})) if(b[m]!==undefined) b[m]+=a; } });
+  return b;
+}
+
+/* ---------------- odds engine ---------------- */
+function computeOdds(r, tix){
+  const st=settings(), R=r.runners, ms=marketsFor(r), pools={};
+  ms.forEach(m=>pools[m]={total:0, by:{}});
+  tix.forEach(t=>{ if(!pools[t.m]) return; const k=keyOf(t.m,t.sel); pools[t.m].total+=t.amt; pools[t.m].by[k]=(pools[t.m].by[k]||0)+t.amt; });
+  const v=st.virtual, W=pools.win.total, p={};
+  R.forEach(id=>p[id]=((pools.win.by[id]||0)+v)/(W+R.length*v));
+  const odds={win:{}};
+  R.forEach(id=>{ const b=pools.win.by[id]||0; const rate=st.rates.win/100;
+    odds.win[id] = b>0 ? {v:Math.max(1,fl(W*rate/b)), sel:[id], pop:b} : {v:Math.max(1,fl(rate/p[id])), sel:[id], pop:0, est:true}; });
+  ms.filter(m=>m!=="win").forEach(m=>{
+    const n=MK[m].n, list = MK[m].ordered ? perms(R,n) : combs(R,n);
+    const seedTotal=(st.seed[m]||0)*list.length, P=pools[m].total+seedTotal, rate=st.rates[m]/100;
+    odds[m]={};
+    list.forEach(sel=>{
+      const k=keyOf(m,sel);
+      const pr = MK[m].ordered ? harv(p,sel) : perms(sel,n).reduce((a,s)=>a+harv(p,s),0);
+      const b=pools[m].by[k]||0, sd=seedTotal*pr;
+      odds[m][k] = (b+sd)>0 ? {v:Math.max(1,fl(P*rate/(b+sd))), sel, pop:b} : {v:0, sel, pop:b, est:true};
+    });
+  });
+  return {pools, odds, p};
+}
+function popularity(r,O){
+  const arr=r.runners.map(id=>({id, v:O.odds.win[id].v}));
+  arr.sort((a,b)=>a.v-b.v); const rank={}; arr.forEach((x,i)=>rank[x.id]=i+1); return rank;
+}
+function trackFlash(O){
+  const t=now();
+  for(const m in O.odds) for(const k in O.odds[m]){
+    const key=m+":"+k, v=O.odds[m][k].v, prev=S.prevOdds[key];
+    if(prev!==undefined && prev!==v) S.flash[key]={dir:v>prev?"up":"down", until:t+1800};
+    S.prevOdds[key]=v;
+  }
+}
+function fc(m,k){ const f=S.flash[m+":"+k]; return f && f.until>now() ? f.dir : ""; }
+
+function settleRace(r){
+  const tix=raceTickets(r), O=computeOdds(r,tix), o=r.order, st=settings();
+  const win={win:o[0], ex:keyOf("ex",[o[0],o[1]]), qu:keyOf("qu",[o[0],o[1]]), tri:keyOf("tri",[o[0],o[1],o[2]]), t3:keyOf("t3",[o[0],o[1],o[2]])};
+  const hits=[], payouts={}, winOdds={};
+  marketsFor(r).forEach(m=>{ const e=O.odds[m][win[m]]; const real=(O.pools[m].by[win[m]]||0)>0; winOdds[m]={key:win[m], sel:e?e.sel:[], v: real&&e ? e.v : null}; });
+  tix.forEach(t=>{
+    if(keyOf(t.m,t.sel)!==win[t.m]) return;
+    const v=winOdds[t.m].v; if(!v) return;
+    const pay=Math.floor(t.amt*v);
+    hits.push({member:t.member, m:t.m, sel:t.sel, amt:t.amt, v, pay});
+    payouts[t.member]=(payouts[t.member]||0)+pay;
+  });
+  const sales=tix.reduce((a,t)=>a+t.amt,0);
+  const prizes={}; (st.prizes[r.type]||[]).forEach((pct,i)=>{ if(!pct||!o[i]||!sales) return; prizes[o[i]]=(prizes[o[i]]||0)+Math.max(1,Math.ceil(sales*pct/100)); });
+  const paid=Object.values(payouts).reduce((a,b)=>a+b,0), prz=Object.values(prizes).reduce((a,b)=>a+b,0);
+  const poolTotals={}; for(const m in O.pools) poolTotals[m]=O.pools[m].total;
+  return {order:o.slice(), sales, poolTotals, winOdds, hits, payouts, prizes, house:sales-paid-prz, at:now()};
+}
+
+/* ---------------- standings & schedule ---------------- */
+function standings(){
+  const s={}; active().forEach(m=>s[m.id]={id:m.id, pts:0, ranks:[0,0,0,0], runs:0});
+  races().filter(r=>r.type==="prelim"&&r.settle).forEach(r=>r.settle.order.forEach((id,i)=>{ if(s[id]){ s[id].pts+=POINTS[i]; s[id].ranks[i]++; s[id].runs++; } }));
+  const tb=id=>(mem(id)||{}).tb||0;
+  Object.values(s).forEach(x=>x.avg=x.runs?x.pts/x.runs:0);
+  return Object.values(s).sort((a,b)=> b.avg-a.avg || b.pts-a.pts || b.ranks[0]-a.ranks[0] || b.ranks[1]-a.ranks[1] || b.ranks[2]-a.ranks[2] || tb(b.id)-tb(a.id));
+}
+function finalsOn(){ const f=(S.state&&S.state.finals)||{}; return {g1:f.g1!==false, dobe:f.dobe!==false}; }
+/* rebuild the remaining waiting qualifier races after someone joins or leaves:
+   fewest total runs go first, avoid back-to-back, spread pairings, nudge extras to mid-tier players */
+function rescheduleRest(s){
+  const ids=s.members.filter(m=>!m.left).map(m=>m.id);
+  const rest=s.races.map((r,i)=>({r,i})).filter(x=>x.i>s.cur && x.r.type==="prelim" && x.r.status==="wait");
+  if(!rest.length || ids.length<4) return false;
+  const base={}; ids.forEach(i=>base[i]=0);
+  s.races.forEach((r,i)=>{ if(r.type==="prelim" && !(i>s.cur && r.status==="wait")) r.runners.forEach(id=>{ if(base[id]!==undefined) base[id]++; }); });
+  const cur=s.races[s.cur], last0=cur&&cur.type==="prelim"?cur.runners:[];
+  const ps=pstats(), mid=id=>{ const x=ps[id]; return x&&x.runs ? Math.abs(x.ranks.reduce((a,c,k)=>a+c*(k+1),0)/x.runs-2.35) : .15; };
+  let best=null, bestScore=Infinity;
+  for(let a=0;a<300;a++){
+    const c=Object.assign({},base), pair={}; let last=last0, out=[], score=0;
+    for(let k=0;k<rest.length;k++){
+      const ch=[];
+      for(let q=0;q<4;q++){
+        const cand=ids.filter(i=>!ch.includes(i));
+        const cost=i=> c[i]*100 + (last.includes(i)?30:0) + ch.reduce((t,o)=>t+(pair[[i,o].sort().join()]||0)*3,0) + mid(i)*8 + Math.random()*3;
+        cand.sort((x,y)=>cost(x)-cost(y)); ch.push(cand[0]);
+      }
+      ch.forEach(i=>{ c[i]++; if(last.includes(i)) score+=10; });
+      for(let x=0;x<4;x++) for(let y=x+1;y<4;y++){ const kk=[ch[x],ch[y]].sort().join(); pair[kk]=(pair[kk]||0)+1; }
+      last=ch; out.push(ch.sort(()=>Math.random()-.5));
+    }
+    const v=Object.values(c), mean=v.reduce((x,y)=>x+y,0)/v.length;
+    score+=v.reduce((t,x)=>t+(x-mean)*(x-mean),0)*100 + Object.values(pair).reduce((t,x)=>t+x*x,0);
+    if(score<bestScore){ best=out; bestScore=score; }
+  }
+  rest.forEach((x,k)=>{ x.r.runners=best[k]; });
+  return true;
+}
+function raceCountOptions(n){ const o=[]; for(let R=3;R<=14;R++){ if(4*R<n) continue; o.push({R, base:Math.floor(4*R/n), extra:(4*R)%n}); } return o; }
+/* extra runs go to players whose all-time average finish is around the middle (slightly upper side);
+   the strongest will race the G1 anyway and the weakest shouldn't be dragged into more races */
+function scheduleTargets(ids, R){
+  const n=ids.length, base=Math.floor(4*R/n), extra=(4*R)%n, ps=pstats();
+  const avg=id=>{ const s=ps[id]; return s&&s.runs ? s.ranks.reduce((a,c,k)=>a+c*(k+1),0)/s.runs : 2.5; };
+  const tb=id=>(mem(id)||{}).tb||0;
+  const order=ids.slice().sort((a,b)=> Math.abs(avg(a)-2.35)-Math.abs(avg(b)-2.35) || tb(a)-tb(b));
+  const extras=order.slice(0,extra), tgt={};
+  ids.forEach(i=>tgt[i]=base+(extras.includes(i)?1:0));
+  return {tgt, extras, base};
+}
+function makeSchedule(ids, tgt){
+  const R=ids.reduce((a,i)=>a+tgt[i],0)/4; let best=null, bestScore=Infinity;
+  for(let a=0;a<600;a++){
+    const cnt={}, pair={}; ids.forEach(i=>cnt[i]=0); let last=[], out=[], score=0, ok=true;
+    for(let r=0;r<R;r++){
+      const chosen=[];
+      for(let s=0;s<4;s++){
+        const cand=ids.filter(i=>cnt[i]<tgt[i] && !chosen.includes(i));
+        if(!cand.length){ ok=false; break; }
+        const maxRem=Math.max(...cand.map(i=>tgt[i]-cnt[i]));
+        const cost=i=> (maxRem-(tgt[i]-cnt[i]))*100 + (last.includes(i)?10:0) + chosen.reduce((a,c)=>a+(pair[[i,c].sort().join()]||0)*3,0) + Math.random()*2;
+        cand.sort((x,y)=>cost(x)-cost(y)); chosen.push(cand[0]);
+      }
+      if(!ok) break;
+      chosen.forEach(i=>{ cnt[i]++; if(last.includes(i)) score+=10; });
+      for(let x=0;x<4;x++) for(let y=x+1;y<4;y++){ const kk=[chosen[x],chosen[y]].sort().join(); pair[kk]=(pair[kk]||0)+1; }
+      last=chosen; out.push(chosen.sort(()=>Math.random()-.5));
+    }
+    if(!ok) continue;
+    score+=Object.values(pair).reduce((a,v)=>a+v*v,0);
+    if(score<bestScore){ best=out; bestScore=score; }
+  }
+  return best;
+}
+
+/* ---------------- db writes (one at a time per doc) ---------------- */
+const queues={};
+function enqueue(path, fn){
+  const p=(queues[path]||Promise.resolve()).then(fn).catch(e=>{ console.error(e); toast(e&&e.code==="invalid_argument" ? "書き込みできませんでした（権限を確認してね）" : "通信エラー。もう一度試してね"); });
+  queues[path]=p; return p;
+}
+function mutateState(fn){
+  return enqueue("game/state", async()=>{ const next=clone(S.state||defaultState()); fn(next); S.state=next; render(); await S.db.doc("game/state").set(next); });
+}
+function mutateLedger(fn){
+  return enqueue("game/ledger", async()=>{ const next=clone(S.ledger||{entries:[]}); fn(next); S.ledger=next; render(); await S.db.doc("game/ledger").set(next); });
+}
+function mutateRoster(fn){
+  return enqueue("game/roster", async()=>{ const next=clone(S.roster||{players:[]}); next.players=next.players||[]; fn(next); S.roster=next; render(); await S.db.doc("game/roster").set(next); });
+}
+function mutateHistory(fn){
+  return enqueue("game/history", async()=>{ const next=clone(S.history||{races:[]}); next.races=next.races||[]; fn(next); S.history=next; render(); await S.db.doc("game/history").set(next); });
+}
+function mutateBets(docId, fn){
+  return enqueue("bets/"+docId, async()=>{ const next=clone(S.bets[docId]||{tickets:[]}); fn(next); S.bets[docId]=next; render(); await S.db.doc("bets/"+docId).set(next); });
+}
+
+/* ---------------- graphics ---------------- */
+const LANE_COL=["#e10600","#0b5cff","#00a651","#ffcc00"];
+function kart(i, num){
+  const c=LANE_COL[i%4], k="#18181d", t=i===3?"#18181d":"#fff";
+  return `<svg class="kart" viewBox="0 0 160 70" aria-hidden="true">
+  <path d="M0 30h26M4 40h22M10 50h14" stroke="${c}" stroke-width="3" opacity=".55" stroke-linecap="round"/>
+  <ellipse cx="88" cy="64" rx="62" ry="4" fill="${k}" opacity=".16"/>
+  <path d="M30 26h22l4 6H34z" fill="${k}"/><rect x="30" y="18" width="5" height="14" fill="${k}"/>
+  <path d="M34 44l8-10h40l14-6h20l30 10c4 2 4 8-1 9l-18 3H40c-4 0-7-3-6-6z" fill="${c}"/>
+  <path d="M66 34l16-8h18l-8 8z" fill="${k}"/>
+  <path d="M44 46h96" stroke="${k}" stroke-width="2.5" opacity=".35"/>
+  <path d="M110 30l38 9" stroke="#fff" stroke-width="2" opacity=".55"/>
+  <circle cx="80" cy="20" r="10" fill="${k}"/><path d="M80 14h10a9 9 0 0 1-2 10h-8z" fill="${c}"/><path d="M83 17h6" stroke="#fff" stroke-width="2"/>
+  <path d="M52 37h18l-3 7H49z" fill="${k}"/><text x="59.5" y="43" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-style="italic" font-weight="800" font-size="8" fill="#fff">${num}</text>
+  <circle cx="54" cy="54" r="10" fill="${k}"/><circle cx="54" cy="54" r="4" fill="#9a9aa3"/>
+  <circle cx="128" cy="54" r="10" fill="${k}"/><circle cx="128" cy="54" r="4" fill="#9a9aa3"/>
+  </svg>`;
+}
+function badge(r,id){ const i=laneIdx(r,id); return `<span class="lanebadge c${i}">${i+1}</span>`; }
+function selHtml(r,m,sel){ const sep=MK[m].ordered?"→":"・"; return sel.map(id=>badge(r,id)).join(`<span class="muted">${sep}</span>`); }
+function selText(r,m,sel){ const sep=MK[m].ordered?"→":"・"; return sel.map(id=>CIRC[laneIdx(r,id)]+mname(id)).join(sep); }
+function coin(){ return `<span class="coin"></span>`; }
+function statusPill(r){ const st=r.status==="countdown"&&remain(r)===0?"closed":r.status; return `<span class="pill st-${st}">${st==="open"||st==="countdown"?'<span class="dot"></span>':""}${STATUS_LABEL[st]}</span>`; }
+function typePill(r){ return `<span class="pill type-${r.type}">${r.type==="prelim"?"予選":r.type==="g1"?"G1":"D1"}</span>`; }
+function logo(){ return `<div class="logo"><div class="flag"></div><div><div class="mark">マリカー競馬</div><div class="sub">KART RACE BETTING</div></div></div>`; }
+
+/* ---------------- sound ---------------- */
+const SFX={ctx:null,on:false};
+try{ SFX.on = localStorage.getItem("mk_sound")==="1"; }catch(e){}
+function audio(){ if(!SFX.ctx){ const C=window.AudioContext||window.webkitAudioContext; if(!C) return null; SFX.ctx=new C(); } if(SFX.ctx.state==="suspended") SFX.ctx.resume(); return SFX.ctx; }
+function tone(f,t0,dur,type,vol,slide){
+  const c=audio(); if(!c) return; const t=c.currentTime+t0, o=c.createOscillator(), g=c.createGain();
+  o.type=type||"square"; o.frequency.setValueAtTime(f,t); if(slide) o.frequency.linearRampToValueAtTime(slide,t+dur);
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol||.12,t+.012); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+dur+.05);
+}
+const NT=n=>440*Math.pow(2,(n-69)/12);
+const SOUNDS={
+  coin(){ tone(NT(83),0,.07,"square",.1); tone(NT(88),.07,.28,"square",.1); },
+  tick(){ tone(NT(81),0,.1,"sine",.22); },
+  tickHi(){ tone(NT(88),0,.2,"sine",.26); },
+  horn(){ tone(NT(45),0,.9,"sawtooth",.12); tone(NT(52),0,.9,"sawtooth",.1); tone(NT(57),0,.9,"square",.05); },
+  reveal(){ [72,76,79,84].forEach((n,i)=>tone(NT(n),i*.07,.14,"square",.08)); },
+  fanfare(){ [[67,0,.12],[72,.12,.12],[76,.24,.12],[79,.36,.3],[76,.7,.12],[79,.82,.7]].forEach(([n,t,d])=>tone(NT(n),t,d,"triangle",.2)); [60,64,67].forEach(n=>tone(NT(n),.82,.7,"square",.04)); },
+  g1(){ [[67,0,.15],[67,.15,.15],[67,.3,.15],[72,.45,.6],[70,1.05,.15],[72,1.2,.15],[74,1.35,.15],[76,1.5,1]].forEach(([n,t,d])=>{ tone(NT(n),t,d,"sawtooth",.08); tone(NT(n+12),t,d,"triangle",.07); });
+    [60,64,67,72].forEach(n=>tone(NT(n),1.5,1.1,"square",.035)); for(let i=0;i<10;i++) tone(NT(84+[0,4,7,12][i%4]),2.5+i*.06,.1,"square",.045); },
+  sad(){ [[55,0,.45],[54,.5,.45],[53,1,.45],[52,1.5,1.3]].forEach(([n,t,d])=>tone(NT(n),t,d,"sawtooth",.12,NT(n)*.97)); },
+  dark(){ tone(NT(36),0,2.4,"sawtooth",.1); tone(NT(37),0,2.4,"sawtooth",.07); tone(NT(48),.4,1.8,"triangle",.06); tone(NT(43),1.6,1.4,"sawtooth",.06,NT(40)); },
+  jackpot(){ for(let i=0;i<12;i++) tone(NT(76+[0,4,7,12][i%4]+(i>=4?12:0)),i*.055,.12,"square",.08); [72,76,79,84].forEach(n=>tone(NT(n),.75,.9,"triangle",.11)); },
+};
+function play(name){ if(!SFX.on||!SOUNDS[name]) return; try{ SOUNDS[name](); }catch(e){} }
+function soundBtn(){ return `<button class="sndbtn ${SFX.on?"on":""}" data-act="sound" aria-pressed="${SFX.on}">${SFX.on?"音 ON":"音 OFF"}</button>`; }
+document.addEventListener("pointerdown",()=>{ if(SFX.on) audio(); },{once:true});
+
+/* watch race transitions for sounds and phone celebrations */
+const W={rid:null,st:null,rem:null,ready:false};
+function seen(k){ try{ return localStorage.getItem(k)==="1"; }catch(e){ return !!S["_"+k]; } }
+function markSeen(k){ try{ localStorage.setItem(k,"1"); }catch(e){ S["_"+k]=true; } }
+function phoneCelebrate(r){
+  const me=myMember(); if(!me||!r.settle||seen("cel:"+r.id)) return;
+  markSeen("cel:"+r.id);
+  const s=r.settle, pay=s.hits.filter(x=>x.member===me).reduce((a,x)=>a+x.pay,0), prize=s.prizes[me]||0;
+  if(pay+prize>0){ const champ=r.type==="g1"&&s.order[0]===me; S.cel={rid:r.id, kind:"win", pay, prize, title: champ?"GRAND PRIX WINNER":pay?"YOU WIN":"PRIZE", head: champ?"G1優勝！":pay?"的中！":"賞金ゲット！"}; play("jackpot"); }
+  else if(r.type==="dobe" && s.order[s.order.length-1]===me){ S.cel={rid:r.id, kind:"dobe"}; play("sad"); }
+  else return;
+  clearTimeout(phoneCelebrate._t); phoneCelebrate._t=setTimeout(()=>{ S.cel=null; render(); },8000);
+  render();
+}
+function sfxWatch(){
+  const md=mode(); if(md!=="board"&&md!=="bet") return;
+  const r=curRace(); if(!r) return;
+  const rem=remain(r), st = r.status==="countdown"&&rem===0 ? "closed" : r.status;
+  if(!W.ready || r.id!==W.rid){
+    const fresh=W.ready; W.ready=true; W.rid=r.id; W.st=st; W.rem=rem;
+    if(fresh && md==="board" && r.type!=="prelim" && st==="open") play(r.type==="g1"?"g1":"dark");
+    if(md==="bet" && st==="done") phoneCelebrate(r);
+    return;
+  }
+  if(st==="countdown" && rem!==W.rem && rem>0 && rem<=(md==="board"?10:5)) play(rem<=3?"tickHi":"tick");
+  if(md==="board" && S.state.ceremony && W.cer!==S.state.ceremony){ W.cer=S.state.ceremony; play("g1"); }
+  if(st!==W.st){
+    if(st==="closed"){ play(md==="board"?"horn":"tickHi"); if(md==="board") setTimeout(()=>play("reveal"),900); }
+    if(st==="done"){ if(md==="board") play(r.type==="g1"?"g1":r.type==="dobe"?"sad":"fanfare"); else phoneCelebrate(r); }
+  }
+  W.st=st; W.rem=rem;
+}
+function celHtml(){
+  const c=S.cel; if(!c) return "";
+  if(c.kind==="dobe") return `<div class="overlay ov-dobe" data-act="celClose"><div class="inner"><div class="gp-top">LAST PLACE</div><div class="stamp">ドベ確定…</div><p class="sub2">次は頑張ろう</p><p class="cel-close">タップで閉じる</p></div></div>`;
+  const coins=confetti(50).replace(/class="cf"/g,'class="cf coinf"');
+  return `<div class="overlay ov-win" data-act="celClose">${coins}${confetti(30)}<div class="inner"><div class="gp-top">${c.title}</div><div class="stamp">${c.head}</div><div class="bigwin">+${c.pay+c.prize}</div><p class="sub2">${c.pay+c.prize}枚${c.prize&&c.pay?`（賞金${c.prize}枚込み）`:""}</p><p class="cel-close">タップで閉じる</p></div></div>`;
+}
+
+/* ---------------- render ---------------- */
+function mode(){ const h=(location.hash||"").replace("#",""); return ["admin","board","bet","stats"].includes(h)?h:""; }
+function render(){
+  const app=document.getElementById("app");
+  const ae=document.activeElement, aid=ae&&ae.id, selS=ae&&ae.selectionStart;
+  let html="";
+  const md=mode();
+  if(S.ready&&S.state) S.ps=pstats();
+  if(!md) html=renderPicker();
+  else if(S.noDb) html=renderNoDb();
+  else if(!S.ready) html=`<div class="picker"><div>${logo()}<p class="muted" style="text-align:center">読み込み中…</p></div></div>`;
+  else if(md==="board") html=renderBoard();
+  else if(md==="bet") html=renderBet();
+  else if(md==="stats") html=renderStats();
+  else html=renderAdmin();
+  app.innerHTML=html;
+  const cr=S.ready&&S.state&&!S.noDb?curRace():null;
+  document.body.dataset.race = (md==="board"||md==="bet")&&cr ? cr.type : "";
+  if(aid){ const el=document.getElementById(aid); if(el){ el.focus(); try{ if(selS!=null) el.setSelectionRange(selS,selS); }catch(e){} } }
+  renderOverlay();
+  if(md==="board") drawQR();
+}
+function renderPicker(){
+  return `<div class="picker"><div style="width:100%;display:grid;justify-items:center">
+    ${logo()}
+    <div class="cards">
+      <a href="#bet" class="pick c0" style="color:inherit;text-decoration:none"><span class="k">PHONE</span><b>投票する</b><span class="muted">自分のスマホから馬券を買う</span></a>
+      <a href="#board" class="pick c1" style="color:inherit;text-decoration:none"><span class="k">TV / MONITOR</span><b>オッズ画面</b><span class="muted">みんなで見る大画面。全画面表示がおすすめ</span></a>
+      <a href="#admin" class="pick c3" style="color:inherit;text-decoration:none"><span class="k">HOST PC</span><b>管理画面</b><span class="muted">メンバー登録・締切・着順入力・チップ送付</span></a>
+      <a href="#stats" class="pick c2" style="color:inherit;text-decoration:none"><span class="k">RECORDS</span><b>成績表</b><span class="muted">今日と通算の着順・勝率・収支</span></a>
+    </div></div></div>`;
+}
+function renderNoDb(){
+  return `<div class="picker"><div style="display:grid;gap:16px;justify-items:center;max-width:520px;text-align:center">${logo()}
+  <div class="warn">${window.MK_WEB?"データベースにつながりません。config.js の Firebase 設定を確認してください。":"共有データに接続できませんでした。claude.ai にログインした状態でこのページを開いてください。"}</div>
+  <a class="btn" href="#">モード選択に戻る</a></div></div>`;
+}
+
+/* ===== BOARD ===== */
+function renderBoard(){
+  const r=curRace();
+  if(!r) return `<div class="board wrap"><div class="checker"></div><div class="bhead">${logo()}</div>
+    <div class="panel" style="text-align:center;padding:60px 16px"><h1 style="font-size:40px">まもなくスタート</h1><p class="muted">管理画面でメンバーを登録して、出走表を作ってください</p></div>${boardQR()}</div>`;
+  const tix=raceTickets(r), O=computeOdds(r,tix); trackFlash(O);
+  const rank=popularity(r,O), W=O.pools.win.total, rem=remain(r), MA=marksAgg(r);
+  const lanes=r.runners.map((id,i)=>{
+    const o=O.odds.win[id], share=W? Math.round((O.pools.win.by[id]||0)/W*100):0;
+    const res = r.settle ? r.settle.order.indexOf(id)+1 : 0;
+    return `<div class="lane c${i}">
+      <div class="gate"><span>${i+1}<small>P</small></span></div>
+      <div>${kart(i,i+1)}</div>
+      <div class="who"><div class="nm">${esc(mname(id))}</div>
+        <div class="meta"><span class="ninki ${rank[id]===1?"n1":""}">${rank[id]}番人気</span><span>単勝票 <b class="num">${O.pools.win.by[id]||0}</b> 枚</span>${res?`<span class="ninki n1">${res}着</span>`:""}${fire(id)}${MA.agg[id].pts?`<span class="mks">◎${MA.agg[id].h} ○${MA.agg[id].t} ▲${MA.agg[id].a}</span>`:""}${MA.top===id?`<span class="ninki honmei">みんなの本命</span>`:""}</div>
+        ${formHtml(id)}
+        <div class="share"><i style="width:${share}%"></i></div></div>
+      <div class="odds"><div class="l">単勝</div><div class="v ${fc("win",id)}">${o.est?`<span class="est">参考</span> `:""}${fmtO(o.v)}</div></div>
+    </div>`;
+  }).join("");
+  const ms=marketsFor(r);
+  const exM = `<div class="panel"><h2>連単 <span class="tag">EXACTA · 1着↓ 2着→</span></h2><div class="scroll"><table class="mx"><tr><th></th>${r.runners.map((id,j)=>`<th>${badge(r,id)}</th>`).join("")}</tr>
+    ${r.runners.map(a=>`<tr><th>${badge(r,a)}</th>${r.runners.map(b=>{ if(a===b) return `<td class="x"></td>`; const k=keyOf("ex",[a,b]), e=O.odds.ex[k]; return `<td class="${fc("ex",k)} ${e.pop?"hot":""}">${fmtO(e.v)}</td>`; }).join("")}</tr>`).join("")}</table></div></div>`;
+  const listM=(m,top)=>{ const arr=Object.entries(O.odds[m]).sort((a,b)=>a[1].v-b[1].v).slice(0,top||99);
+    return `<div class="panel"><h2>${MK[m].label} <span class="tag">${MK[m].help}</span></h2><div class="olist">${arr.map(([k,e])=>`<div class="oitem"><span class="sel">${selHtml(r,m,e.sel)}</span><span class="v ${fc(m,k)}">${fmtO(e.v)}</span></div>`).join("")}</div></div>`; };
+  const sales=ms.map(m=>`<div><small>${MK[m].label}</small><span class="num">${O.pools[m].total}</span></div>`).join("");
+  const total=ms.reduce((a,m)=>a+O.pools[m].total,0);
+  const timer = r.status==="countdown" ? `<div class="timer ${rem<=10?"hot":""}" data-cd="${r.id}">${mmss(rem)}</div>` : statusPill(r);
+  return `<div class="board wrap">
+    <div class="checker"></div>
+    <div class="bhead">
+      <div class="btitle">${logo()}<h1>${esc(raceTitle(r))}</h1>${typePill(r)}</div>
+      <div class="row">${soundBtn()}${timer}</div>
+    </div>
+    <div class="rainbow"></div>
+    <div class="bmain">
+      <div class="lanes">${lanes}</div>
+      <div class="oddsgrid">${exM}${listM("qu")}${listM("tri")}${ms.includes("t3")?listM("t3",8):""}</div>
+    </div>
+    <div class="bfoot">
+      ${boardQR()}
+      <div class="panel"><h2>売上 <span class="tag">TOTAL ${total}</span></h2><div class="sales">${sales}</div>${waitingHtml(r,tix)}</div>
+      <div class="panel"><h2>予選ポイント <span class="tag">STANDINGS</span></h2>${standHtml(6)}</div>
+    </div>
+  </div>`;
+}
+function waitingHtml(r,tix){
+  if(!isLive(r)) return "";
+  const bet=new Set(tix.map(t=>t.member)); const w=active().filter(m=>!r.runners.includes(m.id)&&!bet.has(m.id));
+  return `<p class="muted" style="margin:10px 0 0;font-size:14px">${w.length?`まだ賭けてない人：<b style="color:var(--ink)">${w.map(m=>esc(m.name)).join("、")}</b>`:"全員賭け終わり！"}</p>`;
+}
+function standHtml(limit){
+  const st=standings(); if(!st.length) return `<p class="muted">まだ記録がありません</p>`;
+  const n=st.length, uneven=new Set(st.map(s=>s.runs)).size>1;
+  return `<div class="stand">${st.slice(0,limit||n).map((s,i)=>`<div class="row ${i<4?"g1":(i>=n-4?"dobe":"")}"><span class="num">${i+1}</span><span>${esc(mname(s.id))} ${fire(s.id)}</span><span class="muted" style="font-size:12px">${s.runs}戦</span><b class="num">${uneven?s.avg.toFixed(2):s.pts+"pt"}</b></div>`).join("")}${limit&&n>limit?`<p class="muted" style="margin:4px 0 0;font-size:12px">ほか${n-limit}人</p>`:""}</div>`;
+}
+function boardQR(){
+  return `<div class="panel qr"><div class="code" id="qrcode">${BET_URL?"":'<span style="font-size:12px;text-align:center">QR<br>準備中</span>'}</div>
+  <div class="txt"><b>スマホで投票</b><span class="muted">QRを読み取って<br>名前を選ぶだけ</span></div></div>`;
+}
+let qrDone=false;
+function drawQR(){
+  const el=document.getElementById("qrcode"); if(!el||!BET_URL||typeof QRCode==="undefined") return;
+  el.innerHTML=""; try{ new QRCode(el,{text:BET_URL,width:116,height:116,correctLevel:QRCode.CorrectLevel.M}); }catch(e){}
+}
+
+/* overlays on board: countdown last 5s, reveal (closed), result (done) */
+function renderOverlay(){
+  const ov=document.getElementById("ov");
+  if(mode()==="bet"){ const k=S.cel?"cel"+S.cel.rid:""; if(k!==S.lastOverlayKey){ ov.innerHTML=celHtml(); S.lastOverlayKey=k; } return; }
+  if(mode()!=="board"){ ov.innerHTML=""; S.lastOverlayKey=""; return; }
+  const r=curRace(); if(!r){ ov.innerHTML=""; return; }
+  const rem=remain(r);
+  let key="", html="";
+  const closed = r.status==="closed" || (r.status==="countdown" && rem===0);
+  if(S.introSeen!==r.id){ S.introSeen=r.id; if(r.type!=="prelim" && r.status==="open") S.intro={id:r.id, until:now()+7000}; }
+  if(S.state.ceremony){ key="cer"+S.state.ceremony+":"+allTickets().length+":"+((S.ledger&&S.ledger.entries)||[]).length; html=ceremonyHtml(); }
+  else if(r.status==="countdown" && rem>0 && rem<=5){ key="cd"+r.id+rem; html=`<div class="overlay" style="background:#18181d8c"><div class="bigcount">${rem}</div></div>`; }
+  else if(closed){ key="rv"+r.id+raceTickets(r).length; html=revealHtml(r); }
+  else if(r.status==="done" && r.settle){ key="rs"+r.id+r.settle.at; html=resultHtml(r); }
+  else if(S.intro && S.intro.id===r.id && now()<S.intro.until && isLive(r)){ key="in"+r.id; html=introHtml(r); }
+  if(key!==S.lastOverlayKey){ ov.innerHTML=html; S.lastOverlayKey=key; }
+}
+function confetti(n){
+  const cols=["#ffd84a","#fff","#e10600","#18181d","#ffb000","#fff6c9"]; let s="";
+  for(let i=0;i<n;i++){ const l=(i*37.7)%100, d=((i*1.37)%5).toFixed(2), du=(3+(i%7)*0.5).toFixed(2), w=6+(i%4)*3;
+    s+=`<i class="cf" style="left:${l.toFixed(1)}%;width:${w}px;background:${cols[i%cols.length]};animation-delay:-${d}s;animation-duration:${du}s"></i>`; }
+  return `<div class="confetti">${s}</div>`;
+}
+function introHtml(r){
+  const st=standings(), rank={}; st.forEach((x,i)=>rank[x.id]=i+1);
+  const cards=r.runners.map((id,i)=>`<div class="ic c${i}" style="animation-delay:${.3+i*.15}s"><span class="lanebadge c${i}">${i+1}P</span><div class="k">${kart(i,i+1)}</div><div class="nm">${esc(mname(id))}</div><div class="rk">予選${rank[id]||"-"}位</div></div>`).join("");
+  if(r.type==="g1") return `<div class="overlay ov-g1">${confetti(70)}<div class="inner"><div class="gp-top">FINAL ROUND</div><div class="stamp g1stamp">GRAND PRIX</div><p class="sub2">G1 グランプリ ・ 予選上位4人の頂上決戦</p><div class="introgrid">${cards}</div></div></div>`;
+  return `<div class="overlay ov-dobe"><div class="inner"><div class="gp-top">LAST PLACE BATTLE</div><div class="stamp dobestamp">D1</div><p class="sub2">ドベ決定戦 ・ 4着が真のドベ</p><div class="introgrid">${cards}</div></div></div>`;
+}
+function revealHtml(r){
+  const tix=raceTickets(r), O=computeOdds(r,tix), by={};
+  tix.forEach(t=>(by[t.member]=by[t.member]||[]).push(t));
+  const totals=Object.entries(by).map(([m,ts])=>[m,ts.reduce((a,t)=>a+t.amt,0)]);
+  const maxM = totals.length ? totals.sort((a,b)=>b[1]-a[1])[0][0] : null;
+  let anaM=null, anaV=0; tix.forEach(t=>{ const e=O.odds[t.m][keyOf(t.m,t.sel)]; if(e && e.v>anaV){ anaV=e.v; anaM=t.member; } });
+  const cards=Object.entries(by).map(([m,ts],i)=>{
+    const bs=[]; if(m===maxM) bs.push(`<span class="badge b-max">MAX BET</span>`); if(m===anaM && anaV>=10) bs.push(`<span class="badge b-ana">大穴狙い</span>`); if(ts.length===1) bs.push(`<span class="badge b-one">一点勝負</span>`); if(r.runners.includes(m)) bs.push(`<span class="badge b-self">自分に賭けた</span>`);
+    return `<div class="tcard" style="animation-delay:${i*.12}s"><h3><span>${esc(mname(m))}</span><span class="row">${bs.join("")}</span></h3>
+      ${ts.map(t=>{ const e=O.odds[t.m][keyOf(t.m,t.sel)]; return `<div class="tline"><span class="row" style="gap:6px"><b>${MK[t.m].label}</b>${selHtml(r,t.m,t.sel)}</span><span><b class="num">${t.amt}</b>枚 <span class="muted num">${e?fmtO(e.v):""}倍</span></span></div>`; }).join("")}</div>`;
+  }).join("");
+  return `<div class="overlay ov-${r.type}">${r.type==="g1"?confetti(30):""}<div class="inner"><div class="stamp">締切！馬券公開</div>
+    <p class="sub2">${esc(raceTitle(r))}　売上 <b class="num" style="color:var(--goldink)">${tix.reduce((a,t)=>a+t.amt,0)}</b> 枚</p>
+    ${cards?`<div class="tickets">${cards}</div>`:`<p style="text-align:center">馬券なし</p>`}</div></div>`;
+}
+function resultHtml(r){
+  const s=r.settle;
+  const pod=[1,0,2,3].filter(i=>s.order[i]).map(i=>{ const id=s.order[i], li=laneIdx(r,id); const h=[150,110,80,50][i];
+    return `<div class="pod"><div class="rk r${i+1}">${["1ST","2ND","3RD","4TH"][i]}</div><div class="k">${kart(li,li+1)}</div><div class="nm">${esc(mname(id))}</div>${s.prizes[id]?`<div class="hit">賞金 ${coin()} <span class="num">${s.prizes[id]}</span></div>`:""}<div class="block" style="height:${h}px"></div></div>`; }).join("");
+  const rows=marketsFor(r).map(m=>{ const w=s.winOdds[m]; if(!w) return ""; return `<tr><th>${MK[m].label}</th><td>${selHtml(r,m,w.sel)}</td><td class="num">${w.v?fmtO(w.v)+"倍":'<span class="muted" style="font-size:14px">的中なし</span>'}</td></tr>`; }).join("");
+  const hits = s.hits.length ? s.hits.sort((a,b)=>b.pay-a.pay).map(h=>`<div class="hit">${esc(mname(h.member))} <span class="muted">${MK[h.m].label}</span> ${coin()} <span class="num">+${h.pay}</span></div>`).join("") : `<span class="muted">的中者なし…！</span>`;
+  const last=s.order[s.order.length-1], lli=laneIdx(r,last), champ=s.order[0];
+  const head = r.type==="g1" ? `<div class="gp-top">GRAND PRIX WINNER</div><div class="stamp">${esc(mname(champ))} 優勝！</div>`
+    : r.type==="dobe" ? `<div class="gp-top">LAST PLACE</div><div class="stamp">ドベ決定…</div><div class="loser"><div class="k">${kart(lli,lli+1)}</div><div><div class="lbl">真のドベ</div><div class="nm">${esc(mname(last))}</div></div></div>`
+    : `<div class="stamp">RESULT</div>`;
+  return `<div class="overlay ov-${r.type}">${r.type==="g1"?confetti(90):""}<div class="inner">${head}
+    <div class="podium" style="direction:ltr">${pod}</div>
+    <div class="agrid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+      <div class="panel"><h2>払戻 <span class="tag">PAYOUT</span></h2><table class="paytable">${rows}</table></div>
+      <div class="panel"><h2>的中者 <span class="tag">WINNERS</span></h2><div class="hitlist">${hits}</div></div>
+    </div></div></div>`;
+}
+
+/* ===== BET (phone) ===== */
+function myDoc(){ return S.uid ? S.bets[S.uid] : null; }
+function myMember(){ const d=myDoc(); return d && d.member && mem(d.member) ? d.member : null; }
+function renderBet(){
+  if(!S.uid) return `<div class="bet"><div class="warn">投票するには claude.ai にログインして、このページの編集者として招待してもらってください。</div><a class="btn" href="#">戻る</a></div>`;
+  const me=myMember();
+  if(!me || S.ui.claimOpen){
+    if(!members().length) return `<div class="bet">${logo()}<div class="note">まだメンバーが登録されていません。管理画面での登録を待ってね。</div></div>`;
+    return `<div class="bet">${logo()}<h2 style="font-size:24px">あなたは誰？</h2><div class="claim">${members().map(m=>`<button data-act="claim" data-id="${m.id}">${esc(m.name)}</button>`).join("")}</div>${me?`<button class="btn ghost" data-act="claimCancel">キャンセル</button>`:""}</div>`;
+  }
+  const bal=balances()[me]||0, r=curRace();
+  const head=`<div class="me"><div><div class="muted" style="font-size:12px">PLAYER <button class="btn sm ghost" data-act="claimOpen" style="padding:0 4px;font-size:12px;text-decoration:underline">変更</button></div><div class="nm">${esc(mname(me))}</div></div><div style="text-align:right"><div class="bal">${coin()}<span>${bal}</span></div></div></div>`;
+  const bt=S.ui.btab||"bet";
+  const topTabs=`<div class="btabs">${[["bet","投票"],["stats","成績表"]].map(([k,l])=>`<button class="${bt===k?"on":""}" data-act="btab" data-t="${k}">${l}</button>`).join("")}${soundBtn()}</div>`;
+  if(bt==="stats") return `<div class="bet" style="padding-bottom:40px">${head}${topTabs}${statsMobile()}</div>`;
+  if(!r) return `<div class="bet">${head}${topTabs}<div class="note">レースの準備中です。出走表ができるまで待ってね。</div></div>`;
+  const tix=raceTickets(r), O=computeOdds(r,tix); trackFlash(O);
+  const rem=remain(r), live=isLive(r);
+  const banner=`<div class="rbanner"><div><div class="row" style="gap:6px">${typePill(r)}${statusPill(r)}</div><h2 style="margin-top:6px">${esc(raceTitle(r))}</h2></div>${r.status==="countdown"&&rem>0?`<div class="t ${rem<=10?"hot":""}" data-cd="${r.id}">${mmss(rem)}</div>`:""}</div>`;
+  const mine=tix.filter(t=>t.member===me);
+  if(r.runners.includes(me)){
+    const cap=settings().caps.self||0, li=laneIdx(r,me), so=O.odds.win[me];
+    const used=mine.filter(t=>t.m==="win").reduce((a,t)=>a+t.amt,0), left=Math.max(0,cap-used);
+    const samt=clampAmt(S.ui.amt, Math.min(left,bal)); S.ui.amt=samt;
+    const can=live&&cap>0&&left>=samt&&bal>=samt;
+    const prize=(settings().prizes[r.type]||[])[0]||0;
+    const selfBox = cap>0 ? `<div class="panel selfbet"><h2>自分に賭ける <span class="tag">SELF BET</span></h2>
+      <p class="muted" style="margin:0 0 10px;font-size:13px">走る人は自分の単勝だけ買えます（1レース${cap}枚まで）。1着なら払戻と賞金のW取り！</p>
+      ${live?`<div class="row" style="justify-content:space-between">${amtButtons(samt)}<span class="num ${fc("win",me)}">${so.est?'<span class="est">参考</span>':""}${fmtO(so.v)}倍</span></div>
+      <button class="btn go" data-act="betSelf" ${can?"":"disabled"} style="width:100%;margin-top:12px;font-size:18px">自分の単勝を買う</button>
+      <p class="hint" style="margin-top:8px">${left?`残り${left}枚まで`:"上限まで買いました"}</p>`:`<p class="muted" style="margin:0">締切済み</p>`}</div>` : "";
+    const selfList = mine.length?`<div class="mytix">${mine.map(t=>`<div class="tl"><span class="row" style="gap:6px"><b>単勝</b>${badge(r,t.sel[0])}<b>自分</b></span><span class="row" style="gap:8px"><b class="num">${t.amt}</b>枚${live&&t.doc===S.uid?`<button class="btn sm" data-act="cancelT" data-id="${t.id}">取消</button>`:""}</span></div>`).join("")}</div>`:"";
+    return `<div class="bet">${head}${topTabs}${finalCard(me)}${banner}<div class="cheer"><div class="pbig c${li}"><span>あなたは</span><b>${li+1}P</b><span>${["赤","青","緑","黄"][li]}のレーン</span></div><div style="width:62%;margin:0 auto">${kart(li,li+1)}</div><h2>出走中！</h2><p class="muted">${li+1}Pのコントローラーで走ってください。他の人には賭けられません。1着で売上の${prize}%が賞金！</p></div>${resultMine(r,me)}${selfBox}${selfList}</div>`;
+  }
+  const ms=marketsFor(r);
+  if(!ms.includes(S.ui.m)) S.ui.m="win";
+  const m=S.ui.m, n=MK[m].n, sel=S.ui.sel.filter(id=>r.runners.includes(id));
+  const cards=r.runners.map((id,i)=>{
+    const o=O.odds.win[id], pos=sel.indexOf(id);
+    return `<button class="rcard c${i} ${pos>=0?"sel":""}" data-act="pick" data-id="${id}" ${live?"":"disabled"}>
+      ${pos>=0?`<span class="pos">${MK[m].ordered&&n>1?(pos+1)+"着":"✓"}</span>`:""}
+      <div class="top"><span class="lanebadge c${i}">${i+1}</span><span class="nm">${esc(mname(id))}</span></div>
+      ${formMini(id)}
+      <div class="kwrap">${kart(i,i+1)}</div>
+      <div class="o ${fc("win",id)}"><span class="muted" style="font-size:11px;font-family:var(--f-body)">単勝</span> ${o.est?'<span class="est">参考</span>':""}${fmtO(o.v)}</div>
+    </button>`;
+  }).join("");
+  const tabs=ms.map(x=>`<button class="tab ${x===m?"on":""}" data-act="tab" data-m="${x}">${MK[x].label}<small>${MK[x].help}</small></button>`).join("");
+  const done=sel.length===n, k=done?keyOf(m,sel):null, e=done?O.odds[m][k]:null;
+  const st=settings(), cap=st.caps[m]||0, usedM=mine.filter(t=>t.m===m).reduce((a,t)=>a+t.amt,0);
+  const capLeft=cap?Math.max(0,cap-usedM):Infinity;
+  const amt=clampAmt(S.ui.amt, Math.min(bal, capLeft===Infinity?1e9:capLeft));
+  S.ui.amt=amt;
+  const can=live&&done&&bal>=amt&&amt<=capLeft&&amt>0;
+  const why=!live?"受付していません": !done?`${n===1?"1人":n+"人"}選んでね` : bal<amt?"チップが足りません" : amt>capLeft?`${MK[m].label}は1レース${cap}枚まで`:"";
+  const myList=mine.length?`<h2 style="font-size:16px">このレースの馬券</h2><div class="mytix">${mine.map(t=>{ const eo=O.odds[t.m][keyOf(t.m,t.sel)];
+      return `<div class="tl"><span class="row" style="gap:6px"><b>${MK[t.m].label}</b>${selHtml(r,t.m,t.sel)}</span><span class="row" style="gap:8px"><b class="num">${t.amt}</b>枚<span class="muted num">${eo?fmtO(eo.v):""}倍</span>${live&&t.doc===S.uid?`<button class="btn sm" data-act="cancelT" data-id="${t.id}">取消</button>`:""}</span></div>`; }).join("")}</div>`:"";
+  const bar = live ? `<div class="betbar"><div class="in">
+      <div class="row1"><span class="selv">${done?`<b>${MK[m].label}</b> ${selHtml(r,m,sel)}`:`<span class="muted">${MK[m].label}：${why}</span>`}</span><span class="ov">${e?fmtO(e.v)+"倍":""}</span></div>
+      <div class="row2">
+        ${amtButtons(amt)}
+        <button class="btn go" data-act="bet" ${can?"":"disabled"} style="font-size:18px;padding:12px 18px">賭ける！</button>
+      </div>
+      ${done&&e?`<div class="hint">当たれば ${coin()} <b class="num" style="color:var(--goldink)">${Math.floor(amt*e.v)}</b> 枚<br>オッズは締切まで動きます${cap?`・残り${capLeft}枚まで`:""}</div>`:""}
+    </div></div>` : "";
+  const closedMsg = !live ? (r.status==="done" ? resultMine(r,me) : `<div class="cheer"><h2>締切！</h2><p class="muted">オッズ画面で馬券公開中。レースを楽しんで！</p></div>`) : "";
+  const nr=races()[S.state.cur+1], nextUp = nr && nr.runners.includes(me) ? `<div class="nextup"><span>次のレースはあなたの出番！</span><span><b>${laneIdx(nr,me)+1}P</b> ${["赤","青","緑","黄"][laneIdx(nr,me)]}</span></div>` : "";
+  return `<div class="bet">${head}${topTabs}${finalCard(me)}${nextUp}${banner}${closedMsg}
+    <div class="rcards">${cards}</div>
+    ${live?marksPanel(r,me):""}
+    ${live?`<div class="tabs">${tabs}</div><p class="hint">${MK[m].ordered&&n>1?"1着から順番にタップ":"タップで選択"}（もう一度タップで解除）</p>`:""}
+    ${myList}${bar}</div>`;
+}
+function marksPanel(r,me){
+  const d=S.bets[S.uid]||{}, mk=(d.marks&&d.marks[r.id])||{};
+  return `<div class="mpanel"><div class="mt">予想の印 <span class="muted">（オッズ画面に「みんなの本命」が出ます）</span></div>${[["h","◎","本命"],["t","○","対抗"],["a","▲","単穴"]].map(([k,s,l])=>`<div class="mrow"><span class="mk">${s}<small>${l}</small></span>${r.runners.map((id,i)=>`<button class="mbtn c${i} ${mk[k]===id?"on":""}" data-act="mark" data-k="${k}" data-id="${id}">${i+1}</button>`).join("")}</div>`).join("")}</div>`;
+}
+function resultMine(r,me){
+  if(r.status!=="done"||!r.settle) return "";
+  const s=r.settle, hits=s.hits.filter(h=>h.member===me), pay=hits.reduce((a,h)=>a+h.pay,0), prize=s.prizes[me]||0;
+  return `<div class="cheer"><div class="muted">RESULT</div><div class="row" style="justify-content:center;margin:8px 0">${s.order.map((id,i)=>`<span class="row" style="gap:4px">${i?'<span class="muted">›</span>':""}${badge(r,id)}<b>${esc(mname(id))}</b></span>`).join(" ")}</div>
+    ${pay||prize?`<h2>${pay?`的中！ +${pay}`:""}${prize?` 賞金 +${prize}`:""}</h2>`:`<p class="muted">次のレースで取り返そう！</p>`}</div>`;
+}
+
+/* ===== STATS ===== */
+function statsTable(st, ids, title, tag){
+  const rows=ids.map(id=>st[id]).filter(s=>s&&s.runs).sort((a,b)=> pct(b.ranks[0],b.runs)-pct(a.ranks[0],a.runs) || b.ranks[0]-a.ranks[0] || a.runs-b.runs);
+  if(!rows.length) return `<div class="panel"><h2>${title} <span class="tag">${tag}</span></h2><p class="muted">まだ記録がありません。レースの着順を確定すると記録されます。</p></div>`;
+  return `<div class="panel"><h2>${title} <span class="tag">${tag}</span></h2><div class="scroll"><table class="stbl">
+    <tr><th>名前</th><th>出走</th><th>1着</th><th>2着</th><th>3着</th><th>4着</th><th>勝率</th><th>連対率</th><th>平均着順</th><th>G1制覇</th><th>D1ドベ</th><th>収支</th><th style="text-align:left">近5走</th></tr>
+    ${rows.map((s,i)=>{ const avg=(s.ranks.reduce((a,c,k)=>a+c*(k+1),0)/s.runs).toFixed(2);
+      return `<tr class="${i===0?"rk1":""}"><td><b>${esc(pname(s.id))}</b></td><td class="num">${s.runs}</td>${s.ranks.map(c=>`<td class="num">${c}</td>`).join("")}<td class="num">${pct(s.ranks[0],s.runs)}%</td><td class="num">${pct(s.ranks[0]+s.ranks[1],s.runs)}%</td><td class="num">${avg}</td><td class="num">${s.g1||"-"}</td><td class="num">${s.d1||"-"}</td><td class="num ${s.pl>0?"plus":s.pl<0?"minus":""}">${s.pl>0?"+":""}${s.pl}</td><td style="text-align:left">${recentHtml(s,5)}</td></tr>`; }).join("")}
+  </table></div><p class="muted" style="font-size:12px;margin:8px 0 0">収支は賭けの損益と走った賞金の合計（チップ）。</p></div>`;
+}
+function ticketPay(r,t){ const w=r.settle&&r.settle.winOdds[t.m]; return w&&w.v&&keyOf(t.m,t.sel)===w.key ? Math.floor(t.amt*w.v) : 0; }
+function betRecord(member){
+  const rows=[]; let stake=0, pay=0, hits=0;
+  races().forEach(r=>{ if(!r.settle) return; raceTickets(r).filter(t=>t.member===member).forEach(t=>{ const p=ticketPay(r,t); rows.push({r,t,p}); stake+=t.amt; pay+=p; if(p) hits++; }); });
+  return {rows, stake, pay, hits, n:rows.length, net:pay-stake, roi: stake? Math.round(pay/stake*100) : 0};
+}
+function betTable(){
+  const rows=members().map(m=>({m, ...betRecord(m.id)})).filter(x=>x.n).sort((a,b)=>b.net-a.net);
+  if(!rows.length) return `<div class="panel"><h2>今日の馬券成績 <span class="tag">BETTING</span></h2><p class="muted">確定したレースの馬券がまだありません。</p></div>`;
+  return `<div class="panel"><h2>今日の馬券成績 <span class="tag">BETTING</span></h2><div class="scroll"><table class="stbl"><tr><th>名前</th><th>馬券数</th><th>的中</th><th>的中率</th><th>賭けた</th><th>払戻</th><th>収支</th><th>回収率</th></tr>
+    ${rows.map((x,i)=>`<tr class="${i===0?"rk1":""}"><td><b>${esc(x.m.name)}</b></td><td class="num">${x.n}</td><td class="num">${x.hits}</td><td class="num">${pct(x.hits,x.n)}%</td><td class="num">${x.stake}</td><td class="num">${x.pay}</td><td class="num ${x.net>0?"plus":x.net<0?"minus":""}">${x.net>0?"+":""}${x.net}</td><td class="num">${x.roi}%</td></tr>`).join("")}
+  </table></div><p class="muted" style="font-size:12px;margin:8px 0 0">賭けの損益だけ（走った賞金は含まない）。</p></div>`;
+}
+function statsMobile(){
+  const scope=S.ui.stScope==="all"?"all":"today";
+  const st=scope==="all"?pstats():pstats(S.state.gameId);
+  const here=new Set(members().map(m=>m.id));
+  const rows=Object.values(st).filter(s=>s.runs&&here.has(s.id)).sort((a,b)=> pct(b.ranks[0],b.runs)-pct(a.ranks[0],a.runs) || b.ranks[0]-a.ranks[0] || a.runs-b.runs);
+  const sw=`<div class="tabs"><button class="tab ${scope==="today"?"on":""}" data-act="stScope" data-s="today">今日</button><button class="tab ${scope==="all"?"on":""}" data-act="stScope" data-s="all">通算</button></div>`;
+  if(!rows.length) return sw+`<div class="note">まだ記録がありません。レースの着順が確定すると記録されます。</div>`;
+  return sw+`<div class="mstats">${rows.map((s,i)=>`<div class="ms ${i===0?"top":""}">
+    <div class="ms1"><span class="num rk">${i+1}</span><b class="nm">${esc(pname(s.id))}</b>${s.g1?`<span class="ninki n1">G1×${s.g1}</span>`:""}${s.d1?`<span class="ninki" style="background:var(--carbon);color:#fff">D1ドベ×${s.d1}</span>`:""}<span class="num pr ${s.pl>0?"plus":s.pl<0?"minus":""}">${s.pl>0?"+":""}${s.pl}</span></div>
+    <div class="ms2"><span>勝率 <b>${pct(s.ranks[0],s.runs)}%</b></span><span>連対 <b>${pct(s.ranks[0]+s.ranks[1],s.runs)}%</b></span><span><b>${s.runs}</b>戦 ${s.ranks.join("-")}</span>${recentHtml(s,5)}</div>
+  </div>`).join("")}</div><p class="hint" style="margin-top:8px">着順は 1着-2着-3着-4着 の回数。右の数字は収支（賭け＋賞金）。</p>`;
+}
+function renderStats(){
+  const all=pstats(), today=pstats(S.state.gameId);
+  const ids = S.isOwner ? [...new Set([...roster().map(p=>p.id), ...members().map(m=>m.id), ...Object.keys(all)])] : members().map(m=>m.id);
+  return `<div class="stats wrap"><div class="topnav">${logo()}<div class="links"><a class="btn sm" href="#board">オッズ画面</a><a class="btn sm" href="#bet">投票画面</a><a class="btn sm" href="#admin">管理画面</a></div></div><div class="checker"></div>
+    ${statsTable(today, ids, "今日の成績", "TODAY")}${S.isOwner?betTable():""}${statsTable(all, ids, S.isOwner?"通算成績（全員）":"通算成績（今日の参加者）", "ALL TIME")}</div>`;
+}
+
+/* ===== ADMIN ===== */
+function renderAdmin(){
+  if(!S.isOwner) return window.MK_WEB ? `<div class="bet">${logo()}<div class="panel"><h2>管理画面 <span class="tag">ADMIN</span></h2><p class="muted" style="margin:0 0 10px">暗証番号を入れてください。この端末では次回から入力不要になります。</p><div class="row"><input id="adminPin" data-bind="adminPin" type="password" inputmode="numeric" placeholder="暗証番号" value="${esc(S.ui.form.adminPin||"")}" style="flex:1"><button class="btn go" data-act="pin">開く</button></div></div><a class="btn" href="#">戻る</a></div>` : `<div class="bet">${logo()}<div class="warn">管理画面はこのページのオーナーだけが使えます。</div><a class="btn" href="#">戻る</a></div>`;
+  const st=S.state||defaultState();
+  return `<div class="admin wrap">
+    <div class="topnav">${logo()}<div class="links"><a class="btn sm" href="#board" target="_self">オッズ画面</a><a class="btn sm" href="#bet">投票画面</a><a class="btn sm" href="#stats">成績表</a></div></div>
+    <div class="checker"></div>
+    <div class="agrid">
+      <div class="acol">${adminRace()}${adminFinal()}${adminProxy()}${adminRaces()}${betTable()}${adminHouse()}<div class="panel"><h2>成績表 <span class="tag">RECORDS</span></h2><p class="muted" style="margin:0 0 10px">管理画面からは、名簿の全員の通算成績が見られます。</p><a class="btn go" href="#stats">全員の成績表を開く</a></div></div>
+      <div class="acol">${adminUrls()}${adminMembers()}${adminSchedule()}${adminSettings()}${adminData()}</div>
+    </div></div>`;
+}
+function adminRace(){
+  const r=curRace();
+  if(!r) return `<div class="panel"><h2>レース進行 <span class="tag">RACE CONTROL</span></h2><p class="muted">右の「メンバー」で全員を登録して、「出走表」を作るとスタートできます。</p></div>`;
+  const tix=raceTickets(r), O=computeOdds(r,tix), rem=remain(r), total=tix.reduce((a,t)=>a+t.amt,0);
+  let ctrl="";
+  if(r.status==="open") ctrl=`<button class="btn go" data-act="countdown">締切カウントダウン（${settings().countdown}秒）</button><button class="btn red" data-act="closeNow">即締切</button>`;
+  else if(r.status==="countdown"&&rem>0) ctrl=`<span class="timer ${rem<=10?"hot":""}" data-cd="${r.id}" style="font-size:32px">${mmss(rem)}</span><button class="btn" data-act="plus30">＋30秒</button><button class="btn red" data-act="closeNow">即締切</button>`;
+  else if(r.status==="closed"||(r.status==="countdown"&&rem===0)){
+    const o=S.ui.order.filter(id=>r.runners.includes(id));
+    ctrl=`<div style="display:grid;gap:10px;width:100%"><b>着順を入力（1着から順にタップ）</b>
+      <div class="orderpick">${r.runners.map((id,i)=>{ const p=o.indexOf(id); return `<button class="c${i}" data-act="orderPick" data-id="${id}">${p>=0?`<span class="pos">${p+1}着</span>`:""}<span class="lanebadge c${i}">${i+1}</span>${esc(mname(id))}</button>`; }).join("")}</div>
+      <div class="row"><button class="btn green" data-act="confirmResult" ${o.length>=r.runners.length-1?"":"disabled"}>この着順で確定</button><button class="btn sm" data-act="orderReset">やり直し</button><button class="btn sm ghost" data-act="reopen">締切を取り消す</button></div></div>`;
+  } else if(r.status==="done"){
+    const nextIdx=S.state.cur+1, hasNext=nextIdx<races().length;
+    const prelimDone=races().filter(x=>x.type==="prelim").every(x=>x.status==="done"), hasFinals=races().some(x=>x.type!=="prelim");
+    ctrl = hasNext ? `<button class="btn go" data-act="nextRace">次のレースへ（${esc(raceTitle(races()[nextIdx]))}）</button>`
+      : (!hasFinals&&prelimDone&&(finalsOn().g1||finalsOn().dobe) ? `<button class="btn go" data-act="makeFinals">決勝を組む（${[finalsOn().g1?"上位4人→G1":"",finalsOn().dobe?"下位4人→D1":""].filter(Boolean).join("・")}）</button>` : `<span class="pill st-done">全レース終了！おつかれさま</span><button class="btn ${S.state.ceremony?"":"go"}" data-act="ceremony">${S.state.ceremony?"表彰式を閉じる":"表彰式を始める"}</button>`);
+    ctrl+=`<button class="btn sm ghost" data-act="undoResult">結果を取り消す</button>`;
+    const s=r.settle;
+    ctrl+=`<div style="width:100%" class="muted">結果：${s.order.map(id=>esc(mname(id))).join(" › ")}　売上 ${s.sales}枚・的中 ${s.hits.length}件・賞金 ${Object.values(s.prizes).reduce((a,b)=>a+b,0)}枚</div>`;
+  }
+  const bettors=active().filter(m=>!r.runners.includes(m.id)), bet=new Set(tix.map(t=>t.member));
+  return `<div class="panel"><h2>レース進行 <span class="tag">RACE CONTROL</span></h2>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="row"><h1 style="font-size:28px">${esc(raceTitle(r))}</h1>${typePill(r)}${statusPill(r)}</div><span class="muted">売上 <b class="num" style="color:var(--goldink);font-size:22px">${total}</b> 枚</span></div>
+    <div class="row" style="margin-bottom:12px">${r.runners.map((id,i)=>`<span class="row" style="gap:4px">${badge(r,id)}<b>${esc(mname(id))}</b><span class="muted num">${fmtO(O.odds.win[id].v)}</span></span>`).join("　")}</div>
+    <div class="row">${ctrl}</div>
+    ${isLive(r)?`<p style="margin:12px 0 0;font-size:14px">${bettors.map(m=>`<span class="pill ${bet.has(m.id)?"st-open":"st-wait"}" style="margin:2px">${bet.has(m.id)?"✓":"…"} ${esc(m.name)}</span>`).join("")}</p>`:""}
+  </div>`;
+}
+function adminProxy(){
+  const r=curRace(); if(!r||!isLive(r)) return "";
+  const O=computeOdds(r,raceTickets(r)), ms=marketsFor(r);
+  const bettors=active().filter(m=>!r.runners.includes(m.id));
+  const pm=S.ui.proxyMember && bettors.some(b=>b.id===S.ui.proxyMember) ? S.ui.proxyMember : "";
+  const m=ms.includes(S.ui.pm)?S.ui.pm:"win", n=MK[m].n, sel=S.ui.psel.filter(id=>r.runners.includes(id));
+  const done=sel.length===n, e=done?O.odds[m][keyOf(m,sel)]:null, bal=pm?balances()[pm]:0;
+  return `<div class="panel"><h2>代理入力 <span class="tag">PROXY BET</span></h2>
+    <p class="muted" style="margin:0 0 10px;font-size:13px">スマホがない人・充電切れの人の分をここから入力できます。</p>
+    <div class="row" style="margin-bottom:10px"><select id="proxyMember" data-bind="proxyMember"><option value="">誰の馬券？</option>${bettors.map(b=>`<option value="${b.id}" ${b.id===pm?"selected":""}>${esc(b.name)}</option>`).join("")}</select>${pm?`<span>${coin()} <b class="num">${bal}</b></span>`:""}</div>
+    <div class="tabs" style="margin-bottom:10px">${ms.map(x=>`<button class="tab ${x===m?"on":""}" data-act="ptab" data-m="${x}">${MK[x].label}</button>`).join("")}</div>
+    <div class="orderpick" style="margin-bottom:10px">${r.runners.map((id,i)=>{ const p=sel.indexOf(id); return `<button class="c${i}" data-act="ppick" data-id="${id}">${p>=0?`<span class="pos">${MK[m].ordered&&n>1?(p+1)+"着":"✓"}</span>`:""}<span class="lanebadge c${i}">${i+1}</span>${esc(mname(id))}</button>`; }).join("")}</div>
+    <div class="row"><label class="muted" for="pamt">枚数</label><input id="pamt" class="mini" type="number" min="${unit()}" step="${unit()}" inputmode="numeric" data-bind="pamt" value="${S.ui.pamt}"><span class="num" style="color:var(--goldink);font-size:20px">${e?fmtO(e.v)+"倍":""}</span><button class="btn go" data-act="pbet" ${pm&&done?"":"disabled"}>代理で賭ける</button></div>
+  </div>`;
+}
+function adminRaces(){
+  if(!races().length) return "";
+  return `<div class="panel"><h2>出走表 <span class="tag">SCHEDULE</span></h2><div class="racelist">${races().map((r,i)=>`<div class="ri ${i===S.state.cur?"cur":""}"><b class="num">${r.type==="prelim"?r.no+"R":r.type==="g1"?"G1":"D1"}</b>${statusPill(r)}<span>${r.runners.map((id,j)=>`<span class="row" style="display:inline-flex;gap:3px;margin-right:8px">${badge(r,id)}${esc(mname(id))}</span>`).join("")}</span><span class="muted num">${r.settle?r.settle.sales+"枚":""}</span></div>`).join("")}</div></div>`;
+}
+function rosterHtml(){
+  const rest=roster().filter(p=>!members().some(m=>m.id===p.id));
+  if(!rest.length) return "";
+  return `<div class="roster"><span class="muted" style="font-size:12px;width:100%">いつものメンバー（タップで参加）</span>${rest.map(p=>{ const c=S.ui.confirm==="del:"+p.id; return `<span class="rchip"><button data-act="addRoster" data-id="${p.id}">${esc(p.name)}</button><button class="${c?"warn2":""}" data-act="delRoster" data-id="${p.id}" title="名簿から消す">${c?"消す?":"×"}</button></span>`; }).join("")}<button class="btn sm go" data-act="addAllRoster">全員参加</button></div>`;
+}
+function adminMembers(){
+  const bal=balances(), started=races().length>0;
+  const led=((S.ledger&&S.ledger.entries)||[]).filter(e=>e.gameId===S.state.gameId).slice(-6).reverse();
+  const connected=new Set(Object.entries(S.bets).filter(([k,d])=>k!=="proxy"&&d.member).map(([k,d])=>d.member));
+  return `<div class="panel"><h2>メンバーとチップ <span class="tag">PLAYERS</span></h2>
+    ${started&&!S.ui.showJoin?`<div class="row" style="justify-content:flex-end;margin:-4px 0 6px"><button class="btn sm" data-act="toggleJoin">＋ 途中参加</button></div>`:""}
+    ${started&&S.ui.showJoin?`<div class="row" style="justify-content:space-between;margin:0 0 8px"><span class="muted" style="font-size:12px">途中参加する人を選ぶか、名前を入れてください。残りの予選の出走表を自動で組み直します。</span><button class="btn sm ghost" data-act="toggleJoin">閉じる</button></div>`:""}
+    ${!started||S.ui.showJoin?rosterHtml():""}
+    ${!started||S.ui.showJoin?`<div class="row" style="margin-bottom:10px"><input id="newName" data-bind="newName" placeholder="名前を入力" value="${esc(S.ui.form.newName||"")}" style="flex:1"><button class="btn go" data-act="addMember">${started?"途中参加":"追加"}</button></div>`:""}
+    <div class="scroll"><table class="tbl"><tr><th>名前</th><th class="r">残高</th><th>チップを配る・減らす</th><th></th></tr>
+    ${members().map(m=>`<tr style="${m.left?"opacity:.45":""}"><td><b>${esc(m.name)}</b> ${m.left?'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">離脱</span>':""}${connected.has(m.id)?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">スマホ接続</span>':""}</td><td class="r"><span class="num" style="font-size:18px">${bal[m.id]||0}</span></td>
+      <td><div class="row" style="gap:4px;flex-wrap:nowrap"><input id="send_${m.id}" class="mini" type="number" min="1" inputmode="numeric" placeholder="枚" data-bind="send_${m.id}" value="${esc(S.ui.form["send_"+m.id]||"")}"><button class="btn sm blue" data-act="send" data-id="${m.id}" data-sign="1">配る</button><button class="btn sm go" data-act="send" data-id="${m.id}" data-sign="-1">減らす</button></div></td>
+      <td>${!started?`<button class="btn sm ghost" data-act="delMember" data-id="${m.id}">削除</button>`:m.left?`<button class="btn sm" data-act="rejoin" data-id="${m.id}">復帰</button>`:`<button class="btn sm red" data-act="leave" data-id="${m.id}">離脱</button>`}</td></tr>`).join("")}
+    </table></div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">最初に一人ずつ枚数を入れて「配る」。精算や没収は「減らす」。どちらも下の履歴に残ります。</p>
+    ${led.length?`<div style="margin-top:10px;font-size:13px" class="muted">${led.map(e=>`<div>${new Date(e.t).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}　${esc(mname(e.member))}　<b style="color:var(--ink)">${e.amt>0?"+":""}${e.amt}</b></div>`).join("")}</div>`:""}
+  </div>`;
+}
+function adminSchedule(){
+  const n=members().length, started=races().some(r=>r.status!=="wait"&&r.status!=="open")||allTickets().some(t=>races().some(r=>r.id===t.race));
+  if(races().length && started) return "";
+  if(n<5) return `<div class="panel"><h2>出走表 <span class="tag">SCHEDULE</span></h2><p class="muted">5人以上登録すると出走表を作れます（4人が走って、残りが賭ける）。</p></div>`;
+  const opts=raceCountOptions(n);
+  let R=S.ui.raceCount; if(!opts.some(o=>o.R===R)){ R=opts.some(o=>o.R===8)?8:opts[0].R; S.ui.raceCount=R; }
+  const F=finalsOn(), nf=(F.g1?1:0)+(F.dobe?1:0);
+  return `<div class="panel"><h2>出走表 <span class="tag">SCHEDULE</span></h2>
+    <p class="muted" style="margin:0 0 10px;font-size:13px">予選のレース数を選んでください${nf?`（このあと決勝が${nf}レース）`:""}。</p>
+    <div class="row" style="margin-bottom:12px">${opts.map(x=>`<button class="btn sm ${x.R===R?"go":""}" data-act="rc" data-r="${x.R}">予選${x.R}R<span style="font-size:11px;opacity:.8">（${x.extra?`${x.base}〜${x.base+1}回`:`全員${x.base}回`}）</span></button>`).join("")}</div>
+    <div class="row" style="margin-bottom:4px"><b style="font-size:13px">決勝</b>
+      <button class="btn sm ${F.g1?"go":""}" data-act="fin" data-k="g1">G1 ${F.g1?"あり":"なし"}</button>
+      <button class="btn sm ${F.dobe?"go":""}" data-act="fin" data-k="dobe">D1 ${F.dobe?"あり":"なし"}</button></div>
+    <div style="margin-top:12px"><button class="btn go" data-act="makeSchedule">${races().length?"出走表を作り直す":"出走表を作ってスタート"}</button></div></div>`;
+}
+function adminSettings(){
+  const st=settings(), f=S.ui.form;
+  const v=(id,val)=>f[id]!==undefined?f[id]:val;
+  const inp=(id,label,val)=>`<label for="${id}">${label}<input id="${id}" type="number" step="any" inputmode="decimal" data-bind="${id}" value="${esc(v(id,val))}"></label>`;
+  return `<div class="panel"><h2>ルール設定 <span class="tag">SETTINGS</span></h2>
+    <div class="formgrid">
+      ${MORDER.map(m=>inp("rate_"+m,`${MK[m].label} 払戻率%`,st.rates[m])).join("")}
+      ${["ex","qu","tri","t3"].map(m=>inp("seed_"+m,`${MK[m].label} 見せ金/1買い目`,st.seed[m])).join("")}
+      ${["ex","qu","tri","t3"].map(m=>inp("cap_"+m,`${MK[m].label} 上限枚数`,st.caps[m])).join("")}
+      ${inp("cap_self","走者の自分単勝 上限（0で禁止）",st.caps.self)}
+      ${inp("countdown","締切カウントダウン秒",st.countdown)}
+      ${inp("unit","賭けの単位（枚）",st.unit)}
+      ${inp("pz_prelim_0","予選 1着賞金%",st.prizes.prelim[0])}${inp("pz_prelim_1","予選 2着賞金%",st.prizes.prelim[1])}
+      ${inp("pz_g1_0","G1 1着賞金%",st.prizes.g1[0])}${inp("pz_g1_1","G1 2着賞金%",st.prizes.g1[1])}
+      ${inp("pz_dobe_0","ドベ 1着賞金%",st.prizes.dobe[0])}
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn go" data-act="saveSettings">設定を保存</button><span class="muted" style="font-size:12px">単勝で的中者なしは胴元の総取り。見せ金は計算上だけのチップです。</span></div></div>`;
+}
+function adminUrls(){
+  const list=[["投票用（みんなに配る）","#bet","スマホで開いて名前を選ぶだけ。成績表タブもここにあります"],["大画面用（オッズ画面）","#board","テレビやモニターにつないだPCで全画面表示"],["管理用（あなた専用）","#admin","オーナー以外が開いても操作できません"]];
+  return `<div class="panel"><h2>URL <span class="tag">LINKS</span></h2><div class="urls">${list.map(([t,hs,d])=>`<div class="url"><div><b>${t}</b><div class="muted" style="font-size:12px">${d}</div><code>${BASE_URL+hs}</code></div><button class="btn sm" data-act="copyUrl" data-u="${BASE_URL+hs}">コピー</button></div>`).join("")}</div></div>`;
+}
+function adminData(){
+  const c=S.ui.confirm==="reset";
+  return `<div class="panel"><h2>データ <span class="tag">EXPORT</span></h2>
+    <div class="row"><button class="btn" data-act="csvT">馬券データCSV</button><button class="btn" data-act="csvR">レース結果CSV</button></div>
+    <p class="muted" style="font-size:12px">遊び終わったらCSVを保存して、次回の見せ金や払戻率の分析に使えます。</p>
+    <div class="row" style="margin-top:6px">${c?`<span class="warn">全データを消して最初からにします。よろしい？</span><button class="btn red" data-act="reset">リセットする</button><button class="btn sm" data-act="cancelConfirm">やめる</button>`:`<button class="btn sm ghost" data-act="askReset">ゲームをリセット</button>`}</div></div>`;
+}
+
+/* ---------------- actions ---------------- */
+function toast(msg){ const t=document.getElementById("toast"); t.innerHTML=`<div class="toast">${esc(msg)}</div>`; clearTimeout(toast._t); toast._t=setTimeout(()=>t.innerHTML="",2200); }
+const A={
+  claim(d){ const id=d.id; S.ui.claimOpen=false; mutateBets(S.uid, b=>{ b.member=id; b.tickets=b.tickets||[]; }); },
+  sound(){ SFX.on=!SFX.on; try{ localStorage.setItem("mk_sound",SFX.on?"1":"0"); }catch(e){} if(SFX.on){ audio(); play("coin"); } render(); },
+  celClose(){ S.cel=null; render(); },
+  btab(d){ S.ui.btab=d.t; render(); },
+  stScope(d){ S.ui.stScope=d.s; render(); },
+  copyUrl(d){ const u=d.u; try{ navigator.clipboard.writeText(u).then(()=>toast("コピーしました"),()=>toast("長押しでコピーしてね")); }catch(e){ toast("長押しでコピーしてね"); } },
+  claimOpen(){ S.ui.claimOpen=true; render(); },
+  claimCancel(){ S.ui.claimOpen=false; render(); },
+  tab(d){ S.ui.m=d.m; S.ui.sel=[]; render(); },
+  pick(d){ const m=S.ui.m, n=MK[m].n, s=S.ui.sel, i=s.indexOf(d.id);
+    if(i>=0) s.splice(i,1); else if(n===1) S.ui.sel=[d.id]; else if(s.length<n) s.push(d.id); render(); },
+  amt(d){ S.ui.amt=Math.max(unit(),(S.ui.amt||unit())+(+d.d)); render(); },
+  bet(){
+    const r=curRace(), me=myMember(); if(!r||!me||!isLive(r)) return;
+    const m=S.ui.m, sel=S.ui.sel.slice(), amt=S.ui.amt;
+    if(amt%unit()){ toast(`${unit()}枚単位で賭けてね`); return; }
+    if(sel.length!==MK[m].n) return;
+    const bal=balances()[me]||0; if(bal<amt){ toast("チップが足りません"); return; }
+    const cap=settings().caps[m]||0; const used=raceTickets(r).filter(t=>t.member===me&&t.m===m).reduce((a,t)=>a+t.amt,0);
+    if(cap && used+amt>cap){ toast(`${MK[m].label}は1レース${cap}枚までです`); return; }
+    mutateBets(S.uid, b=>{ b.member=me; (b.tickets=b.tickets||[]).push({id:rid(), race:r.id, member:me, m, sel, amt, t:now()}); });
+    S.ui.sel=[]; play("coin"); toast(`${MK[m].label} ${amt}枚 賭けました！`);
+  },
+  betSelf(){
+    const r=curRace(), me=myMember(); if(!r||!me||!isLive(r)||!r.runners.includes(me)) return;
+    const cap=settings().caps.self||0, amt=S.ui.amt;
+    if(amt%unit()){ toast(`${unit()}枚単位で賭けてね`); return; }
+    const used=raceTickets(r).filter(t=>t.member===me&&t.m==="win").reduce((a,t)=>a+t.amt,0);
+    if(!cap||used+amt>cap){ toast(`自分への単勝は1レース${cap}枚までです`); return; }
+    if((balances()[me]||0)<amt){ toast("チップが足りません"); return; }
+    mutateBets(S.uid, b=>{ b.member=me; (b.tickets=b.tickets||[]).push({id:rid(), race:r.id, member:me, m:"win", sel:[me], amt, t:now()}); });
+    play("coin"); toast(`自分の単勝 ${amt}枚！ 勝つしかない`);
+  },
+  cancelT(d){ const r=curRace(); if(!r||!isLive(r)) return; mutateBets(S.uid, b=>{ b.tickets=(b.tickets||[]).filter(t=>t.id!==d.id); }); toast("取り消しました"); },
+  /* admin */
+  addMember(){ const name=(S.ui.form.newName||"").trim(); if(!name) return; if(members().some(m=>m.name===name)){ toast("同じ名前がいます"); return; }
+    const p=roster().find(x=>x.name===name), id=p?p.id:"p"+rid();
+    S.ui.form.newName="";
+    if(!p) mutateRoster(r=>{ r.players.push({id, name}); });
+    let re=false; mutateState(s=>{ s.members.push({id, name, tb:Math.random()}); re=rescheduleRest(s); }).then(()=>{ if(re) toast(`${name}が途中参加。残りの出走表を組み直しました`); });
+    toast(p?`${name}（登録済み）を追加`:`${name}を追加して名簿に保存しました`); },
+  addRoster(d){ const p=roster().find(x=>x.id===d.id); if(!p||members().some(m=>m.id===p.id)) return; let re=false; mutateState(s=>{ s.members.push({id:p.id, name:p.name, tb:Math.random()}); re=rescheduleRest(s); }).then(()=>{ if(re) toast(`${p.name}が途中参加。残りの出走表を組み直しました`); }); },
+  addAllRoster(){ const add=roster().filter(p=>!members().some(m=>m.id===p.id)); if(!add.length) return; mutateState(s=>{ add.forEach(p=>s.members.push({id:p.id, name:p.name, tb:Math.random()})); rescheduleRest(s); }); toast(`${add.length}人を追加しました`); },
+  delRoster(d){ if(S.ui.confirm!=="del:"+d.id){ S.ui.confirm="del:"+d.id; render(); return; } S.ui.confirm=null; mutateRoster(r=>{ r.players=r.players.filter(p=>p.id!==d.id); }); toast("名簿から消しました（成績は残ります）"); },
+  mark(d){ const r=curRace(), me=myMember(); if(!r||!me||!isLive(r)) return;
+    mutateBets(S.uid, b=>{ b.member=me; b.marks=b.marks||{}; const mk=b.marks[r.id]=b.marks[r.id]||{};
+      if(mk[d.k]===d.id) delete mk[d.k]; else { for(const k in mk) if(mk[k]===d.id) delete mk[k]; mk[d.k]=d.id; } }); },
+  ceremony(){ mutateState(s=>{ s.ceremony = s.ceremony ? null : now(); }); },
+  pin(){ if(window.MK_WEB && window.MK_WEB.checkPin(S.ui.form.adminPin||"")){ S.isOwner=true; S.ui.form.adminPin=""; render(); } else toast("暗証番号が違います"); },
+  toggleJoin(){ S.ui.showJoin=!S.ui.showJoin; render(); },
+  leave(d){
+    const r=curRace();
+    if(r && isLive(r) && r.runners.includes(d.id)){ toast(`${mname(d.id)}は今のレースに出走中。レースが終わってから離脱してね`); return; }
+    if(active().length-1<5) toast("参加者が4人以下になると賭ける人がいなくなります");
+    let re=false; mutateState(s=>{ const m=s.members.find(x=>x.id===d.id); if(m) m.left=true; re=rescheduleRest(s); }).then(()=>toast(`${mname(d.id)}が離脱${re?"。残りの出走表を組み直しました":""}`));
+  },
+  rejoin(d){ let re=false; mutateState(s=>{ const m=s.members.find(x=>x.id===d.id); if(m) m.left=false; re=rescheduleRest(s); }).then(()=>toast(`${mname(d.id)}が復帰${re?"。残りの出走表を組み直しました":""}`)); },
+  delMember(d){ mutateState(s=>{ s.members=s.members.filter(m=>m.id!==d.id); }); },
+  send(d){ const n=Math.abs(parseInt(S.ui.form["send_"+d.id],10)||0); if(!n){ toast("枚数を入れてね"); return; }
+    const v=d.sign==="-1"?-n:n, bal=balances()[d.id]||0;
+    if(v<0 && n>bal){ toast(`${mname(d.id)}の残高は${bal}枚です`); return; }
+    S.ui.form["send_"+d.id]="";
+    mutateLedger(l=>{ (l.entries=l.entries||[]).push({id:rid(), gameId:S.state.gameId, member:d.id, amt:v, t:now()}); });
+    toast(v>0?`${mname(d.id)}に${n}枚配りました`:`${mname(d.id)}から${n}枚減らしました`); },
+  rc(d){ S.ui.raceCount=+d.r; render(); },
+  fin(d){ const k=d.k; mutateState(s=>{ s.finals=Object.assign({g1:true,dobe:true}, s.finals||{}); s.finals[k]=!s.finals[k]; }); },
+  makeSchedule(){
+    const ids=members().map(m=>m.id), R=S.ui.raceCount; if(!R) return;
+    const sch=makeSchedule(ids, scheduleTargets(ids,R).tgt); if(!sch){ toast("組み合わせを作れませんでした"); return; }
+    mutateState(s=>{ s.races=sch.map((runners,i)=>({id:"r"+rid(), no:i+1, type:"prelim", runners, status:i===0?"open":"wait", closeAt:null, settle:null})); s.cur=0; });
+    toast("出走表を作りました！第1レース受付開始");
+  },
+  countdown(){ const sec=settings().countdown; mutateState(s=>{ const r=s.races[s.cur]; r.status="countdown"; r.closeAt=now()+sec*1000; }); },
+  plus30(){ mutateState(s=>{ const r=s.races[s.cur]; if(r.closeAt) r.closeAt+=30000; }); },
+  closeNow(){ S.ui.order=[]; mutateState(s=>{ const r=s.races[s.cur]; r.status="closed"; r.closeAt=Math.min(r.closeAt||Infinity, now()); }); },
+  reopen(){ mutateState(s=>{ const r=s.races[s.cur]; r.status="open"; r.closeAt=null; }); },
+  orderPick(d){ const o=S.ui.order, i=o.indexOf(d.id); if(i>=0) o.splice(i,1); else o.push(d.id); render(); },
+  orderReset(){ S.ui.order=[]; render(); },
+  confirmResult(){
+    const r=curRace(); if(!r) return; let o=S.ui.order.filter(id=>r.runners.includes(id));
+    if(o.length===r.runners.length-1) o.push(r.runners.find(id=>!o.includes(id)));
+    if(o.length!==r.runners.length) return;
+    const rr=clone(r); rr.order=o; const settle=settleRace(rr);
+    S.ui.order=[];
+    const pl={}; raceTickets(rr).forEach(t=>pl[t.member]=(pl[t.member]||0)-t.amt);
+    for(const [m,a] of Object.entries(settle.payouts)) pl[m]=(pl[m]||0)+a;
+    for(const [m,a] of Object.entries(settle.prizes)) pl[m]=(pl[m]||0)+a;
+    const gid=S.state.gameId, rid0=r.id, typ=r.type;
+    mutateState(s=>{ const x=s.races[s.cur]; x.order=o; x.settle=settle; x.status="done"; if(!x.closeAt) x.closeAt=now(); });
+    mutateHistory(hh=>{ hh.races=hh.races.filter(x=>x.rid!==rid0); hh.races.push({rid:rid0, gid, t:now(), type:typ, order:o, pl}); });
+  },
+  undoResult(){ const r=curRace(); const rid0=r&&r.id; mutateState(s=>{ const x=s.races[s.cur]; x.settle=null; x.order=null; x.status="closed"; }); if(rid0) mutateHistory(hh=>{ hh.races=hh.races.filter(x=>x.rid!==rid0); }); },
+  nextRace(){ mutateState(s=>{ s.cur++; const r=s.races[s.cur]; r.status="open"; r.closeAt=null; }); },
+  makeFinals(){
+    const st=standings(); if(st.length<4) return;
+    const top=st.slice(0,4).map(x=>x.id), bottom=st.slice(-4).map(x=>x.id);
+    const F=finalsOn(); if(!F.g1&&!F.dobe) return;
+    mutateState(s=>{ const first=s.races.length;
+      if(F.dobe) s.races.push({id:"r"+rid(), no:s.races.length+1, type:"dobe", runners:bottom, status:"wait", closeAt:null, settle:null});
+      if(F.g1) s.races.push({id:"r"+rid(), no:s.races.length+1, type:"g1", runners:top, status:"wait", closeAt:null, settle:null});
+      s.cur=first; s.races[first].status="open"; });
+    toast(F.dobe?"決勝を組みました！まずはD1ドベ決定戦":"決勝を組みました！G1グランプリ");
+  },
+  ptab(d){ S.ui.pm=d.m; S.ui.psel=[]; render(); },
+  ppick(d){ const m=S.ui.pm, n=MK[m].n, s=S.ui.psel, i=s.indexOf(d.id); if(i>=0) s.splice(i,1); else if(n===1) S.ui.psel=[d.id]; else if(s.length<n) s.push(d.id); render(); },
+  pbet(){
+    const r=curRace(), pm=S.ui.proxyMember, m=S.ui.pm, sel=S.ui.psel.slice(), amt=parseInt(S.ui.pamt,10)||0;
+    if(amt%unit()){ toast(`${unit()}枚単位で入力してね`); return; }
+    if(!r||!isLive(r)||!pm||sel.length!==MK[m].n||amt<1) return;
+    if((balances()[pm]||0)<amt){ toast("チップが足りません"); return; }
+    const cap=settings().caps[m]||0, used=raceTickets(r).filter(t=>t.member===pm&&t.m===m).reduce((a,t)=>a+t.amt,0);
+    if(cap&&used+amt>cap){ toast(`${MK[m].label}は1レース${cap}枚までです`); return; }
+    mutateBets("proxy", b=>{ (b.tickets=b.tickets||[]).push({id:rid(), race:r.id, member:pm, m, sel, amt, t:now()}); });
+    S.ui.psel=[]; toast(`${mname(pm)}：${MK[m].label} ${amt}枚`);
+  },
+  saveSettings(){
+    const f=S.ui.form, st=settings(), num=(id,d)=>{ const x=parseFloat(f[id]); return isFinite(x)?x:d; };
+    MORDER.forEach(m=>st.rates[m]=num("rate_"+m,st.rates[m]));
+    ["ex","qu","tri","t3"].forEach(m=>{ st.seed[m]=Math.max(0,num("seed_"+m,st.seed[m])); st.caps[m]=Math.max(0,Math.round(num("cap_"+m,st.caps[m]))); });
+    st.caps.self=Math.max(0,Math.round(num("cap_self",st.caps.self)));
+    st.unit=Math.max(1,Math.round(num("unit",st.unit)));
+    st.countdown=Math.max(5,Math.round(num("countdown",st.countdown)));
+    st.prizes.prelim=[num("pz_prelim_0",st.prizes.prelim[0]),num("pz_prelim_1",st.prizes.prelim[1])];
+    st.prizes.g1=[num("pz_g1_0",st.prizes.g1[0]),num("pz_g1_1",st.prizes.g1[1])];
+    st.prizes.dobe=[num("pz_dobe_0",st.prizes.dobe[0])];
+    Object.keys(f).filter(k=>/^(rate_|seed_|cap_|pz_|countdown|unit|yen)/.test(k)).forEach(k=>delete f[k]);
+    mutateState(s=>{ s.settings=st; }); toast("設定を保存しました");
+  },
+  askReset(){ S.ui.confirm="reset"; render(); },
+  cancelConfirm(){ S.ui.confirm=null; render(); },
+  reset(){ S.ui.confirm=null; const keep=settings(); mutateState(s=>{ Object.assign(s, defaultState()); s.settings=keep; }); toast("リセットしました"); },
+  csvT(){ exportCSV("tickets"); },
+  csvR(){ exportCSV("races"); },
+};
+async function exportCSV(kind){
+  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  let rows=[];
+  if(kind==="tickets"){
+    rows.push(["race_no","race_type","bettor","market","selection","amount","placed_at","valid","hit","odds","payout","entry"]);
+    races().forEach(r=>{
+      allTickets().filter(t=>t.race===r.id).forEach(t=>{
+        const ok=validFor(r,t), h=r.settle&&r.settle.hits.find(x=>x.member===t.member&&x.m===t.m&&keyOf(x.m,x.sel)===keyOf(t.m,t.sel));
+        rows.push([r.no,r.type,mname(t.member),MK[t.m].label,selText(r,t.m,t.sel),t.amt,new Date(t.t).toISOString(),ok?1:0,h?1:0,h?h.v:"",h?Math.floor(t.amt*h.v):"",t.doc==="proxy"?"proxy":"phone"]);
+      });
+    });
+  } else {
+    rows.push(["race_no","race_type","runners","order","sales","win_pool","ex_pool","qu_pool","tri_pool","t3_pool","payout_total","prize_total","house","win_odds","ex_odds","qu_odds","tri_odds","t3_odds"]);
+    races().forEach(r=>{ const s=r.settle; if(!s) return; const pt=s.poolTotals||{};
+      rows.push([r.no,r.type,r.runners.map(mname).join("/"),s.order.map(mname).join(">"),s.sales,pt.win||0,pt.ex||0,pt.qu||0,pt.tri||0,pt.t3||"",Object.values(s.payouts).reduce((a,b)=>a+b,0),Object.values(s.prizes).reduce((a,b)=>a+b,0),s.house,...["win","ex","qu","tri","t3"].map(m=>s.winOdds[m]?(s.winOdds[m].v??"none"):"")]); });
+  }
+  const csv="﻿"+rows.map(r=>r.map(q).join(",")).join("\n");
+  const dl=await claude.use("downloads");
+  if(!dl){ toast("このビューでは保存できません"); return; }
+  try{ await dl.save({filename:`marika-keiba-${kind}.csv`, data:csv}); }catch(e){ if(e&&e.code!=="declined") toast("保存できませんでした"); }
+}
+
+/* ---------------- events ---------------- */
+document.addEventListener("click",e=>{
+  const el=e.target.closest("[data-act]"); if(!el||el.disabled) return;
+  const f=A[el.dataset.act]; if(f){ e.preventDefault(); f(el.dataset, el); }
+});
+document.addEventListener("input",e=>{
+  const b=e.target.dataset&&e.target.dataset.bind; if(!b) return;
+  if(b==="proxyMember") S.ui.proxyMember=e.target.value;
+  else if(b==="pamt") S.ui.pamt=e.target.value;
+  else S.ui.form[b]=e.target.value;
+  if(b==="proxyMember") render();
+});
+document.addEventListener("change",e=>{ if(e.target.dataset&&e.target.dataset.bind==="proxyMember"){ S.ui.proxyMember=e.target.value; render(); } });
+document.addEventListener("keydown",e=>{ if(e.key==="Enter"&&e.target.id==="newName") A.addMember(); if(e.key==="Enter"&&e.target.id==="adminPin") A.pin(); });
+window.addEventListener("hashchange",()=>{ S.lastOverlayKey=""; render(); });
+
+/* ticker: countdown digits, auto-close on admin, overlay countdown */
+let lastStatusKey="";
+setInterval(()=>{
+  const r=curRace(); if(!r) return;
+  document.querySelectorAll("[data-cd]").forEach(el=>{ const s=remain(r); if(s!==null){ el.textContent=mmss(s); el.classList.toggle("hot",s<=10); } });
+  if(mode()==="admin" && S.isOwner && r.status==="countdown" && now()>=r.closeAt && !S.closing){
+    S.closing=true; S.ui.order=[]; mutateState(s=>{ const x=s.races[s.cur]; if(x.status==="countdown") x.status="closed"; }).finally(()=>S.closing=false);
+  }
+  sfxWatch();
+  const key=r.id+r.status+(isLive(r)?"L":"C")+(r.status==="countdown"&&remain(r)<=5?remain(r):"");
+  if(key!==lastStatusKey){ lastStatusKey=key; render(); }
+  else if(mode()==="board") renderOverlay();
+},250);
+
+/* ---------------- boot ---------------- */
+render();
+(async()=>{
+  const [db,user]=await Promise.all([claude.use("db"), claude.use("user")]);
+  if(!db){ S.noDb=true; render(); return; }
+  S.db=db; S.user=user;
+  if(user){ S.uid=await user.id(); S.isOwner=await user.isOwner(); }
+  let got=0; const mark=()=>{ if(++got>=5){ S.ready=true; } render(); };
+  const once=fn=>{ let first=true; return x=>{ fn(x); if(first){ first=false; mark(); } else render(); }; };
+  db.doc("game/state").onSnapshot(once(s=>{ S.state = s.exists ? s.data() : defaultState(); }), e=>console.error(e));
+  db.doc("game/ledger").onSnapshot(once(s=>{ S.ledger = s.exists ? s.data() : {entries:[]}; }), e=>console.error(e));
+  db.doc("game/roster").onSnapshot(once(s=>{ S.roster = s.exists ? s.data() : {players:[]}; }), e=>console.error(e));
+  db.doc("game/history").onSnapshot(once(s=>{ S.history = s.exists ? s.data() : {races:[]}; }), e=>console.error(e));
+  db.collection("bets").onSnapshot(once(q=>{ const b={}; q.docs.forEach(d=>b[d.id]=d.data()); S.bets=b; }), e=>console.error(e));
+})();
+</script>
+
+</body>
+</html>

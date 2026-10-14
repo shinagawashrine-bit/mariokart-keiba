@@ -260,6 +260,18 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .amt .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:36px;min-width:1.8em;text-align:center;line-height:1}
 .betbar .num[style]{color:var(--yellow)!important}
 .mytix{display:grid;gap:4px}
+.mystats{display:grid;gap:10px}
+.msh{font-size:18px;font-style:italic;margin:10px 0 0;display:flex;align-items:center}
+.mrace{background:var(--paper);padding:10px 12px;display:grid;gap:6px;border-top:3px solid var(--ink)}
+.mrh{display:flex;justify-content:space-between;align-items:center}
+.mrh .num{font-size:22px}
+.mro{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:13px}
+.mrn{font-size:13px;font-weight:700}
+.mdays{display:grid;gap:6px}
+.mday{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;width:100%;text-align:left;background:var(--paper);padding:12px;border:0;border-left:4px solid var(--ink);font:inherit;font-weight:700;cursor:pointer;color:var(--ink)}
+.mday.on{border-left-color:var(--red)}
+.mday .num{font-size:20px}
+.mdaybody{display:grid;gap:8px;padding:2px 0 8px 10px}
 .tbl .btn{white-space:nowrap}
 .nameedit{font:inherit;font-weight:900;color:inherit;background:none;border:0;border-bottom:1px dashed #0000004d;padding:2px 0;cursor:pointer;text-align:left}
 .nameedit:hover{color:var(--red);border-bottom-color:var(--red)}
@@ -1015,7 +1027,7 @@ function helpPlayer(){
     ${mImg("b_result.jpg","結果発表。表彰台、払戻の倍率、当てた人")}
     ${mImg("p_result.jpg","左：締切後のスマホ。右：当たると「的中！」画面（タップで閉じる）")}<p>外れたときは「LOSE」画面が出て、そのレースで賭けた枚数が表示されます。馬券を買っていないレースでは何も出ません。</p>
     ${mImg("p_final.jpg","左：本日の最終ポイント。右：成績表タブ")}
-    <ul class="mlist"><li>全レースが終わると「本日の最終ポイント」が出ます。配られた枚数からどれだけ増えたか、何位かがわかります。</li><li>「成績表」タブで、今日と通算の着順・勝率・収支が見られます。</li></ul>`)}</div>
+    <ul class="mlist"><li>全レースが終わると「本日の最終ポイント」が出ます。配られた枚数からどれだけ増えたか、何位かがわかります。</li><li>「成績表」タブには自分のデータだけが出ます。一番上が今の成績（残高・増減・順位）、その下が今日のレースごとの自分の馬券とチップの増減です。</li><li>下の「通算」には遊んだ日の一覧が出ます。日付を押すと、その日のレースと馬券が見られます。</li></ul>`)}</div>
   <div id="m-faq">${mSec("困ったとき","FAQ",`
     <div class="scroll"><table class="tbl mtbl"><tr><th>こんなとき</th><th>こうする</th></tr>
     <tr><td>自分の名前がない</td><td>主催者に登録してもらう</td></tr>
@@ -1380,17 +1392,52 @@ function betTable(){
     ${rows.map((x,i)=>`<tr class="${i===0?"rk1":""}"><td><b>${esc(x.m.name)}</b></td><td class="num">${x.n}</td><td class="num">${x.hits}</td><td class="num">${pct(x.hits,x.n)}%</td><td class="num">${x.stake}</td><td class="num">${x.pay}</td><td class="num ${x.net>0?"plus":x.net<0?"minus":""}">${x.net>0?"+":""}${x.net}</td><td class="num">${x.roi}%</td></tr>`).join("")}
   </table></div><p class="muted" style="font-size:12px;margin:8px 0 0">賭けの損益だけ（走った賞金は含まない）。</p></div>`;
 }
+/* スマホの成績表：自分のデータだけ。今の成績 → 今日のレース → 通算（日付を押すとその日のレース） */
+function myRaceRows(me, gid){
+  const H=((S.history&&S.history.races)||[]).filter(x=>x.gid===gid).slice().sort((a,b)=>a.t-b.t);
+  return H.map(x=>{
+    const live=races().find(r=>r.id===x.rid&&r.settle);
+    let tix;
+    if(live) tix=raceTickets(live).filter(t=>t.member===me).map(t=>({m:t.m, sel:t.sel, amt:t.amt, pay:ticketPay(live,t)}));
+    else tix=(x.tix||[]).filter(t=>t.member===me);
+    const prize=(live?live.settle.prizes[me]:(x.prizes||{})[me])||0;
+    const place=x.order.indexOf(me);
+    return {x, live, tix, hasTix:live||!!x.tix, prize, place, net:(x.pl||{})[me]||0};
+  });
+}
+function myRaceTitle(x){ return x.type==="prelim" ? (x.no?`第${x.no}R 予選`:"予選") : TYPE_LABEL[x.type]; }
+function myRaceCards(rows){
+  if(!rows.length) return `<div class="note">まだ確定したレースがありません。</div>`;
+  return rows.slice().reverse().map(({x,live,tix,hasTix,prize,place,net})=>{
+    const ord=x.order.map((id,i)=>`<span class="selp">${live?badge(live,id):`<span class="muted">${i+1}着</span>`}<span class="selnm">${esc(shortName(pname(id)))}</span></span>`).join('<span class="muted">›</span>');
+    const lines=tix.map(t=>`<div class="tl"><span class="row" style="gap:6px"><b>${MK[t.m].label}</b>${live?selHtml(live,t.m,t.sel,true):esc(t.sel.map(id=>t.sel.length>1?shortName(pname(id)):pname(id)).join(MK[t.m].ordered?"→":"・"))}</span><span><b class="num">${t.amt}</b>枚 ${t.pay?`<b class="plus">的中 +${t.pay}</b>`:'<span class="muted">はずれ</span>'}</span></div>`).join("");
+    const note=[place>=0?`あなたは${place+1}着`:"", prize?`賞金 +${prize}`:""].filter(Boolean).join("・");
+    return `<div class="mrace"><div class="mrh"><b>${esc(myRaceTitle(x))}</b><span class="num ${net>0?"plus":net<0?"minus":""}">${net>0?"+":""}${net}</span></div>
+      <div class="mro">${ord}</div>
+      ${note?`<div class="mrn">${note}</div>`:""}
+      ${lines?`<div class="mytix">${lines}</div>`:`<div class="muted" style="font-size:13px">${hasTix?"このレースは賭けていません":"馬券の記録はありません"}</div>`}</div>`;
+  }).join("");
+}
 function statsMobile(){
-  const scope=S.ui.stScope==="all"?"all":"today";
-  const st=scope==="all"?pstats():pstats(S.state.gameId);
-  const here=new Set(members().map(m=>m.id));
-  const rows=Object.values(st).filter(s=>s.runs&&here.has(s.id)).sort((a,b)=> pct(b.ranks[0],b.runs)-pct(a.ranks[0],a.runs) || b.ranks[0]-a.ranks[0] || a.runs-b.runs);
-  const sw=`<div class="tabs"><button class="tab ${scope==="today"?"on":""}" data-act="stScope" data-s="today">今日</button><button class="tab ${scope==="all"?"on":""}" data-act="stScope" data-s="all">通算</button></div>`;
-  if(!rows.length) return sw+`<div class="note">まだ記録がありません。レースの着順が確定すると記録されます。</div>`;
-  return sw+`<div class="mstats">${rows.map((s,i)=>`<div class="ms ${i===0?"top":""}">
-    <div class="ms1"><span class="num rk">${i+1}</span><b class="nm">${esc(pname(s.id))}</b>${s.g1?`<span class="ninki n1">G1×${s.g1}</span>`:""}${s.d1?`<span class="ninki" style="background:var(--carbon);color:#fff">D1ドベ×${s.d1}</span>`:""}<span class="num pr ${s.pl>0?"plus":s.pl<0?"minus":""}">${s.pl>0?"+":""}${s.pl}</span></div>
-    <div class="ms2"><span>勝率 <b>${pct(s.ranks[0],s.runs)}%</b></span><span>連対 <b>${pct(s.ranks[0]+s.ranks[1],s.runs)}%</b></span><span><b>${s.runs}</b>戦 ${s.ranks.join("-")}</span>${recentHtml(s,5)}</div>
-  </div>`).join("")}</div><p class="hint" style="margin-top:8px">着順は 1着-2着-3着-4着 の回数。右の数字は収支（賭け＋賞金）。</p>`;
+  const me=myMember(); if(!me) return "";
+  const gid=S.state.gameId, rows=finalRows(), ri=rows.findIndex(x=>x.id===me), cur=rows[ri];
+  const today=myRaceRows(me,gid), hits=today.reduce((a,r)=>a+r.tix.filter(t=>t.pay).length,0);
+  const runs=today.filter(r=>r.place>=0), wins=runs.filter(r=>r.place===0).length;
+  const top=cur?`<div class="final"><div class="ft">${dayOver()?"本日の最終ポイント":"今の成績"}</div><div class="fv"><span class="num">${cur.bal}</span>枚</div>
+    <div class="fs"><span>配られた ${cur.given}枚</span><b class="${cur.net>0?"plus":cur.net<0?"minus":""}">${cur.net>0?"+":""}${cur.net}</b><span>${ri+1}位 / ${rows.length}人</span></div>
+    <div class="fs" style="margin-top:4px"><span>的中 ${hits}回</span><span>出走 ${runs.length}回（1着 ${wins}回）</span></div></div>`:"";
+  // 通算：日ごと
+  const H=(S.history&&S.history.races)||[], days={};
+  H.forEach(x=>{ const inv=x.order.includes(me)||(x.pl&&x.pl[me]!=null); if(!inv) return; const d=days[x.gid]||(days[x.gid]={gid:x.gid, t:x.t, net:0, n:0}); d.t=Math.min(d.t,x.t); d.net+=(x.pl||{})[me]||0; d.n++; });
+  const list=Object.values(days).sort((a,b)=>b.t-a.t), total=list.reduce((a,d)=>a+d.net,0);
+  const fmtD=t=>{ const d=new Date(t); return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${"日月火水木金土"[d.getDay()]}）`; };
+  const open=S.ui.openDay;
+  const dayHtml=list.map(d=>`<button class="mday ${open===d.gid?"on":""}" data-act="openDay" data-g="${d.gid}"><span>${fmtD(d.t)}${d.gid===gid?' <span class="pill st-open" style="font-size:10px;padding:1px 6px">今日</span>':""}</span><span class="muted" style="font-size:12px">${d.n}レース</span><b class="num ${d.net>0?"plus":d.net<0?"minus":""}">${d.net>0?"+":""}${d.net}</b></button>${open===d.gid?`<div class="mdaybody">${myRaceCards(myRaceRows(me,d.gid))}</div>`:""}`).join("");
+  return `<div class="mystats">${top}
+    <h2 class="msh">今日のレース</h2>${myRaceCards(today)}
+    <h2 class="msh">通算 <span class="num ${total>0?"plus":total<0?"minus":""}" style="font-size:20px;margin-left:6px">${total>0?"+":""}${total}</span></h2>
+    ${list.length?`<p class="hint" style="margin:0 0 6px">日付を押すと、その日のレースと馬券が見られます。</p><div class="mdays">${dayHtml}</div>`:`<div class="note">まだ記録がありません。</div>`}
+  </div>`;
 }
 function renderStats(){
   const all=pstats(), today=pstats(S.state.gameId);
@@ -1543,6 +1590,7 @@ const A={
   btab(d){ S.ui.btab=d.t; render(); },
   mjump(d){ const el=document.getElementById(d.id); if(el) el.scrollIntoView({behavior:"smooth",block:"start"}); },
   stScope(d){ S.ui.stScope=d.s; render(); },
+  openDay(d){ S.ui.openDay=S.ui.openDay===d.g?null:d.g; render(); },
   copyUrl(d){ const u=d.u; try{ navigator.clipboard.writeText(u).then(()=>toast("コピーしました"),()=>toast("長押しでコピーしてね")); }catch(e){ toast("長押しでコピーしてね"); } },
   claimOpen(){ S.ui.claimOpen=true; render(); },
   claimCancel(){ S.ui.claimOpen=false; render(); },
@@ -1634,10 +1682,11 @@ const A={
     const pl={}; raceTickets(rr).forEach(t=>pl[t.member]=(pl[t.member]||0)-t.amt);
     for(const [m,a] of Object.entries(settle.payouts)) pl[m]=(pl[m]||0)+a;
     for(const [m,a] of Object.entries(settle.prizes)) pl[m]=(pl[m]||0)+a;
-    const gid=S.state.gameId, rid0=r.id, typ=r.type, pools={};
+    const gid=S.state.gameId, rid0=r.id, typ=r.type, pools={}; rr.settle=settle;
+    const htix=raceTickets(rr).map(t=>({member:t.member, m:t.m, sel:t.sel, amt:t.amt, pay:ticketPay(rr,t)}));
     marketsFor(rr).forEach(m=>pools[m]=0); raceTickets(rr).forEach(t=>{ if(pools[t.m]!=null) pools[t.m]+=t.amt; });
     mutateState(s=>{ const x=s.races[s.cur]; x.order=o; x.settle=settle; x.status="done"; if(!x.closeAt) x.closeAt=now(); });
-    mutateHistory(hh=>{ hh.races=hh.races.filter(x=>x.rid!==rid0); hh.races.push({rid:rid0, gid, t:now(), type:typ, order:o, pl, pools, ext:r.ext||0, early:r.early?1:0}); });
+    mutateHistory(hh=>{ hh.races=hh.races.filter(x=>x.rid!==rid0); hh.races.push({rid:rid0, gid, t:now(), type:typ, no:r.no, runners:r.runners, order:o, pl, pools, ext:r.ext||0, early:r.early?1:0, tix:htix, prizes:settle.prizes}); });
   },
   undoResult(){ const r=curRace(); const rid0=r&&r.id; mutateState(s=>{ const x=s.races[s.cur]; x.settle=null; x.order=null; x.status="closed"; }); if(rid0) mutateHistory(hh=>{ hh.races=hh.races.filter(x=>x.rid!==rid0); }); },
   nextRace(){ mutateState(s=>{ s.cur++; const r=s.races[s.cur]; r.status="open"; r.closeAt=null; }); },

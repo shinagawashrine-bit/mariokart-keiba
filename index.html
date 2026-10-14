@@ -585,6 +585,8 @@ function fmtO(v){ return v>=100 ? Math.floor(v).toString() : v.toFixed(1); }
 function now(){ return Date.now(); }
 function members(){ return (S.state&&S.state.members)||[]; }
 function active(){ return members().filter(m=>!m.left); }
+/* レースに出る人：離脱しておらず「出走×」でもない人 */
+function racers(){ return active().filter(m=>!m.noRace); }
 function mem(id){ return members().find(m=>m.id===id); }
 function mname(id){ return (mem(id)||{}).name || "?"; }
 function races(){ return (S.state&&S.state.races)||[]; }
@@ -788,7 +790,7 @@ function settleRace(r){
 
 /* ---------------- standings & schedule ---------------- */
 function standings(){
-  const s={}; active().forEach(m=>s[m.id]={id:m.id, pts:0, ranks:[0,0,0,0], runs:0});
+  const s={}; racers().forEach(m=>s[m.id]={id:m.id, pts:0, ranks:[0,0,0,0], runs:0});
   races().filter(r=>r.type==="prelim"&&r.settle).forEach(r=>r.settle.order.forEach((id,i)=>{ if(s[id]){ s[id].pts+=POINTS[i]; s[id].ranks[i]++; s[id].runs++; } }));
   const tb=id=>(mem(id)||{}).tb||0;
   Object.values(s).forEach(x=>x.avg=x.runs?x.pts/x.runs:0);
@@ -798,7 +800,7 @@ function finalsOn(){ const f=(S.state&&S.state.finals)||{}; return {g1:f.g1!==fa
 /* rebuild the remaining waiting qualifier races after someone joins or leaves:
    fewest total runs go first, avoid back-to-back, spread pairings, nudge extras to mid-tier players */
 function rescheduleRest(s){
-  const ids=s.members.filter(m=>!m.left).map(m=>m.id);
+  const ids=s.members.filter(m=>!m.left&&!m.noRace).map(m=>m.id);
   const rest=s.races.map((r,i)=>({r,i})).filter(x=>x.i>s.cur && x.r.type==="prelim" && x.r.status==="wait");
   if(!rest.length || ids.length<4) return false;
   const base={}; ids.forEach(i=>base[i]=0);
@@ -1056,7 +1058,7 @@ function helpAdmin(){
     <h3>1. 管理画面を開く</h3>
     <ol class="mlist"><li>管理用URLを開き、暗証番号を入れて「開く」（一度入れた端末は次回から不要）</li><li>テレビにつないだPCで大画面用URLを開き、全画面表示にする</li></ol>
     <h3>2. メンバーを登録する</h3>
-    <ul class="mlist"><li>初めての人：「名前を入力」に名前を入れて「追加」ボタン（Enterキーでは追加されません）</li><li>名前を間違えたら、メンバー一覧の名前を押すとその場で直せます（Enterか「保存」で決定）</li><li>苗字と名前のあいだにスペースを入れておくと（例：小泉 勝史）、馬券に何人か並ぶときに苗字だけが正しく表示されます</li><li>2回目から：「いつものメンバー」の名前をタップ。「全員参加」でまとめて追加</li></ul>
+    <ul class="mlist"><li>初めての人：「名前を入力」に名前を入れて「追加」ボタン（Enterキーでは追加されません）</li><li>名前を間違えたら、メンバー一覧の名前を押すとその場で直せます（Enterか「保存」で決定）</li><li>レースに出たくない人は、その人の行の「出走×」を押します（赤くなります）。出走表に入らず、賭けるだけになります。もう一度押すと戻せます。途中で押した場合は、まだ始まっていない予選が自動で組み直されます</li><li>苗字と名前のあいだにスペースを入れておくと（例：小泉 勝史）、馬券に何人か並ぶときに苗字だけが正しく表示されます</li><li>2回目から：「いつものメンバー」の名前をタップ。「全員参加」でまとめて追加</li></ul>
     <h3>3. チップを配る</h3>
     <p>各自の行の「枚」に枚数を入れて青い「配る」。1チップ＝1円の感覚で、賭けは${unit()}チップ単位です。全員に同じ枚数を配るのがおすすめです（例：1万チップ）。配りすぎたら「減らす」。</p>
     ${mImg("members.jpg","8人を登録し、各1000枚を配ったところ")}
@@ -1521,9 +1523,9 @@ function adminMembers(){
     ${!started||S.ui.showJoin?rosterHtml():""}
     ${!started||S.ui.showJoin?`<div class="row" style="margin-bottom:10px"><input id="newName" data-bind="newName" placeholder="名前を入力" value="${esc(S.ui.form.newName||"")}" style="flex:1"><button class="btn go" data-act="addMember">${started?"途中参加":"追加"}</button></div>`:""}
     <div class="scroll"><table class="tbl"><tr><th>名前</th><th class="r">残高</th><th>チップを配る・減らす</th><th></th></tr>
-    ${members().map(m=>`<tr style="${m.left?"opacity:.45":""}"><td>${S.ui.editName===m.id?`<span class="row" style="gap:4px"><input id="rename_${m.id}" class="mini" style="width:100%;min-width:90px" data-bind="rename_${m.id}" value="${esc(S.ui.form["rename_"+m.id]??m.name)}" aria-label="新しい名前"><button class="btn sm go" data-act="renameSave" data-id="${m.id}">保存</button><button class="btn sm ghost" data-act="renameCancel">やめる</button></span>`:`<button class="nameedit" data-act="renameStart" data-id="${m.id}" title="押すと名前を直せます">${esc(m.name)}</button>`} ${m.left?'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">離脱</span>':""}${connected.has(m.id)?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">スマホ接続</span>':""}</td><td class="r"><span class="num" style="font-size:18px">${bal[m.id]||0}</span></td>
+    ${members().map(m=>`<tr style="${m.left?"opacity:.45":""}"><td>${S.ui.editName===m.id?`<span class="row" style="gap:4px"><input id="rename_${m.id}" class="mini" style="width:100%;min-width:90px" data-bind="rename_${m.id}" value="${esc(S.ui.form["rename_"+m.id]??m.name)}" aria-label="新しい名前"><button class="btn sm go" data-act="renameSave" data-id="${m.id}">保存</button><button class="btn sm ghost" data-act="renameCancel">やめる</button></span>`:`<button class="nameedit" data-act="renameStart" data-id="${m.id}" title="押すと名前を直せます">${esc(m.name)}</button>`} ${m.left?'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">離脱</span>':""}${m.noRace?'<span class="pill st-wait" style="font-size:10px;padding:1px 14px 1px 6px">走らない</span>':""}${connected.has(m.id)?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">スマホ接続</span>':""}</td><td class="r"><span class="num" style="font-size:18px">${bal[m.id]||0}</span></td>
       <td><div class="row" style="gap:4px;flex-wrap:nowrap"><input id="send_${m.id}" class="mini" type="number" min="1" inputmode="numeric" placeholder="枚" data-bind="send_${m.id}" value="${esc(S.ui.form["send_"+m.id]||"")}"><button class="btn sm blue" data-act="send" data-id="${m.id}" data-sign="1">配る</button><button class="btn sm go" data-act="send" data-id="${m.id}" data-sign="-1">減らす</button></div></td>
-      <td>${!started?`<button class="btn sm ghost" data-act="delMember" data-id="${m.id}">削除</button>`:m.left?`<button class="btn sm" data-act="rejoin" data-id="${m.id}">復帰</button>`:`<button class="btn sm red" data-act="leave" data-id="${m.id}">離脱</button>`}</td></tr>`).join("")}
+      <td style="white-space:nowrap"><button class="btn sm ${m.noRace?"go":"ghost"}" data-act="toggleRace" data-id="${m.id}" aria-pressed="${!!m.noRace}" title="${m.noRace?"押すとレースに出られるように戻します":"押すとこの人をレースに入れません"}">出走×</button> ${!started?`<button class="btn sm ghost" data-act="delMember" data-id="${m.id}">削除</button>`:m.left?`<button class="btn sm" data-act="rejoin" data-id="${m.id}">復帰</button>`:`<button class="btn sm red" data-act="leave" data-id="${m.id}">離脱</button>`}</td></tr>`).join("")}
     </table></div>
     <p class="muted" style="font-size:12px;margin:8px 0 0">最初に一人ずつ枚数を入れて「配る」。精算や没収は「減らす」。どちらも下の履歴に残ります。</p>
     ${led.length?`<div style="margin-top:10px;font-size:13px" class="muted">${led.map(e=>`<div>${new Date(e.t).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})}　${esc(mname(e.member))}　<b style="color:var(--ink)">${e.amt>0?"+":""}${e.amt}</b></div>`).join("")}</div>`:""}
@@ -1533,11 +1535,13 @@ function adminSchedule(){
   const n=members().length, started=races().some(r=>r.status!=="wait"&&r.status!=="open")||allTickets().some(t=>races().some(r=>r.id===t.race));
   if(races().length && started) return "";
   if(n<5) return `<div class="panel"><h2>出走表 <span class="tag">SCHEDULE</span></h2><p class="muted">5人以上登録すると出走表を作れます（4人が走って、残りが賭ける）。</p></div>`;
-  const opts=raceCountOptions(n);
+  const nr=members().filter(m=>!m.noRace).length, nx=n-nr;
+  if(nr<4) return `<div class="panel"><h2>出走表 <span class="tag">SCHEDULE</span></h2><p class="muted">走れる人が4人以上必要です。「出走×」を付けた人が多すぎます。</p></div>`;
+  const opts=raceCountOptions(nr);
   let R=S.ui.raceCount; if(!opts.some(o=>o.R===R)){ R=opts.some(o=>o.R===8)?8:opts[0].R; S.ui.raceCount=R; }
   const F=finalsOn(), nf=(F.g1?1:0)+(F.dobe?1:0);
   return `<div class="panel"><h2>出走表 <span class="tag">SCHEDULE</span></h2>
-    <p class="muted" style="margin:0 0 10px;font-size:13px">予選のレース数を選んでください${nf?`（このあと決勝が${nf}レース）`:""}。</p>
+    <p class="muted" style="margin:0 0 10px;font-size:13px">予選のレース数を選んでください${nf?`（このあと決勝が${nf}レース）`:""}。${nx?`出走×の${nx}人はレースに入りません（賭けるだけ）。`:""}</p>
     <div class="row" style="margin-bottom:12px">${opts.map(x=>`<button class="btn sm ${x.R===R?"go":""}" data-act="rc" data-r="${x.R}">予選${x.R}R<span style="font-size:11px;opacity:.8">（${x.extra?`${x.base}〜${x.base+1}回`:`全員${x.base}回`}）</span></button>`).join("")}</div>
     <div class="row" style="margin-bottom:4px"><b style="font-size:13px">決勝</b>
       <button class="btn sm ${F.g1?"go":""}" data-act="fin" data-k="g1">G1 ${F.g1?"あり":"なし"}</button>
@@ -1651,6 +1655,13 @@ const A={
     if(active().length-1<5) toast("参加者が4人以下になると賭ける人がいなくなります");
     let re=false; mutateState(s=>{ const m=s.members.find(x=>x.id===d.id); if(m) m.left=true; re=rescheduleRest(s); }).then(()=>toast(`${mname(d.id)}が離脱${re?"。残りの出走表を組み直しました":""}`));
   },
+  toggleRace(d){
+    const m0=mem(d.id); if(!m0) return; const off=!m0.noRace, r=curRace();
+    if(off && r && r.status!=="done" && r.runners.includes(d.id)){ toast(`${m0.name}は今のレースに出走中。このレースが終わってから出走×にしてね`); return; }
+    if(off && racers().filter(x=>x.id!==d.id).length<4){ toast("走れる人が4人未満になるので出走×にできません"); return; }
+    let re=false; mutateState(s=>{ const m=s.members.find(x=>x.id===d.id); if(m) m.noRace=off; re=s.races.length?rescheduleRest(s):false; })
+      .then(()=>toast(`${m0.name}を${off?"出走×（レースに入れない）":"出走できる"}にしました${re?"。残りの出走表を組み直しました":""}`));
+  },
   rejoin(d){ let re=false; mutateState(s=>{ const m=s.members.find(x=>x.id===d.id); if(m) m.left=false; re=rescheduleRest(s); }).then(()=>toast(`${mname(d.id)}が復帰${re?"。残りの出走表を組み直しました":""}`)); },
   delMember(d){ mutateState(s=>{ s.members=s.members.filter(m=>m.id!==d.id); }); },
   send(d){ const n=Math.abs(parseInt(S.ui.form["send_"+d.id],10)||0); if(!n){ toast("枚数を入れてね"); return; }
@@ -1662,7 +1673,8 @@ const A={
   rc(d){ S.ui.raceCount=+d.r; render(); },
   fin(d){ const k=d.k; mutateState(s=>{ s.finals=Object.assign({g1:true,dobe:true}, s.finals||{}); s.finals[k]=!s.finals[k]; }); },
   makeSchedule(){
-    const ids=members().map(m=>m.id), R=S.ui.raceCount; if(!R) return;
+    const ids=members().filter(m=>!m.noRace).map(m=>m.id), R=S.ui.raceCount; if(!R) return;
+    if(ids.length<4){ toast("走れる人が4人未満です（出走×を外してください）"); return; }
     const sch=makeSchedule(ids, scheduleTargets(ids,R).tgt); if(!sch){ toast("組み合わせを作れませんでした"); return; }
     mutateState(s=>{ s.races=sch.map((runners,i)=>({id:"r"+rid(), no:i+1, type:"prelim", runners, status:i===0?"open":"wait", closeAt:null, settle:null})); s.cur=0; });
     toast("出走表を作りました！第1レース受付開始");

@@ -526,6 +526,7 @@ body[data-race="dobe"] .qr .code{background:#fff}
 .mbtn.on{background:var(--lc);color:#fff}
 .mbtn.c3.on{color:#18181d}
 .awards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.awards.g1row{grid-template-columns:repeat(auto-fit,minmax(240px,320px));justify-content:center}
 .award{background:var(--paper);padding:16px 18px 18px;display:grid;gap:4px;text-align:center;border-top:6px solid var(--red);box-shadow:0 14px 30px -14px #000a;animation:awardIn .7s cubic-bezier(.2,1.5,.4,1) backwards}
 .award.gold{border-top-color:#d4a017;background:linear-gradient(180deg,#fff8dc,#fff)}
 @keyframes awardIn{from{opacity:0;transform:translateY(40px) scale(.8)}}
@@ -759,9 +760,11 @@ function ceremonyHtml(){
   if(A.hit) cards.push(["的中王","当てた回数がいちばん多い人",A.hit.id,`${A.hit.n}回的中（払戻${A.hit.pay}枚）`]);
   if(A.ana) cards.push(["大穴賞","いちばん高い倍率を当てた人",A.ana.id,`${MK[A.ana.m].label} ${fmtO(A.ana.v)}倍（${esc(raceTitle(A.ana.r))}）`]);
   A.g1s.forEach(g=>cards.push(["G1チャンピオン",A.g1s.length>1?`第${g.r.round||1}大会 グランプリ優勝`:"グランプリ優勝",g.id,"GRAND PRIX WINNER"]));
-  const body=cards.map(([t,d,id,v],i)=>`<div class="award ${t==="G1チャンピオン"?"gold":""}" style="animation-delay:${1+i*2.6}s"><div class="at">${t}</div><div class="ad">${d}</div><div class="an">${esc(mname(id))}</div><div class="av">${v}</div></div>`).join("");
+  const card=([t,d,id,v],i)=>`<div class="award ${t==="G1チャンピオン"?"gold":""}" style="animation-delay:${1+i*2.6}s"><div class="at">${t}</div><div class="ad">${d}</div><div class="an">${esc(mname(id))}</div><div class="av">${v}</div></div>`;
+  /* G1チャンピオンは2列目にまとめて出す */
+  const body=cards.map((c,i)=>c[0]==="G1チャンピオン"?"":card(c,i)).join(""), g1body=cards.map((c,i)=>c[0]==="G1チャンピオン"?card(c,i):"").join("");
   const fr=finalRows(), rank=fr.length?`<div class="crank" style="animation-delay:${1+cards.length*2.6}s"><div class="crt">本日の最終チップ</div>${fr.map((x,i)=>`<div class="crr ${i===0?"top":""}"><span class="num">${i+1}</span><b>${esc(mname(x.id))}</b><span class="num">${x.bal}</span><span class="num ${x.net>0?"plus":x.net<0?"minus":""}">${x.net>0?"+":""}${x.net}</span></div>`).join("")}</div>`:"";
-  return `<div class="overlay ov-g1">${confetti(80)}<div class="inner"><div class="gp-top">AWARDS</div><div class="stamp">本日の表彰式</div><div class="awards">${body||'<p class="sub2">記録がありません</p>'}</div>${rank}</div></div>`;
+  return `<div class="overlay ov-g1">${confetti(80)}<div class="inner"><div class="gp-top">AWARDS</div><div class="stamp">本日の表彰式</div>${body?`<div class="awards">${body}</div>`:""}${g1body?`<div class="awards g1row">${g1body}</div>`:""}${body||g1body?"":'<p class="sub2">記録がありません</p>'}${rank}</div></div>`;
 }
 function houseRows(){
   return races().filter(r=>r.settle).map(r=>{ const s=r.settle, pt=s.poolTotals||{}, payM={};

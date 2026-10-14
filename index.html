@@ -159,7 +159,9 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .mx td.x{background:repeating-linear-gradient(-60deg,#e3e2dc 0 4px,transparent 4px 9px)}
 .mx td.hot{background:#fff2c2;box-shadow:inset 0 -3px 0 var(--yellow)}
 .olist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px}
-.oitem{display:flex;align-items:center;justify-content:space-between;gap:6px;background:var(--paper2);padding:6px 12px 6px 8px;border-left:3px solid var(--ink)}
+.olist.n3{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.oitem .v{white-space:nowrap}
+.oitem{min-width:0;display:flex;align-items:center;justify-content:space-between;gap:6px;background:var(--paper2);padding:6px 12px 6px 8px;border-left:3px solid var(--ink)}
 .oitem .sel{display:flex;gap:3px;align-items:center;font-size:13px}
 .oitem .sel .lanebadge{font-size:13px}
 .oitem .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:clamp(18px,1.8vw,27px);display:inline-block}
@@ -272,6 +274,14 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .amtin:focus{outline:2px solid var(--yellow);outline-offset:2px}
 .betbar .num[style]{color:var(--yellow)!important}
 .mytix{display:grid;gap:4px}
+.podds{background:var(--paper);padding:10px;display:grid;gap:8px;margin:6px 0;box-shadow:0 8px 24px -16px #00000066}
+.pot{font-weight:900;font-style:italic;font-size:15px}
+.pot .muted{font-size:12px;font-weight:700;font-style:normal}
+.pol{display:grid;grid-template-columns:1fr;gap:4px;max-height:330px;overflow:auto}
+.poi{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;background:#f4f4f2;border:0;border-left:4px solid var(--ink);font:inherit;color:var(--ink);text-align:left;cursor:pointer;min-height:44px}
+.poi.on{background:#fff4c2;border-left-color:var(--red);outline:2px solid var(--red)}
+.poi .sel{display:flex;flex-wrap:wrap;gap:4px;align-items:center;font-size:14px;min-width:0}
+.poi .num{font-family:var(--f-num);font-style:italic;font-weight:800;font-size:24px;white-space:nowrap}
 .mybox{background:var(--paper);display:grid;margin:10px 0;box-shadow:0 8px 24px -16px #00000066;text-align:left}
 .mybox h2{font-size:17px;font-style:italic;margin:0;padding:8px 12px;background:var(--carbon);color:#fff;display:flex;justify-content:space-between;align-items:baseline}
 .mybox h2 span{font-size:13px;color:#d6d6dc;font-weight:700}
@@ -541,7 +551,7 @@ const MORDER = ["win","ex","qu","tri","t3"];
 const DEFAULT_SETTINGS = {
   rates:{win:80, ex:75, qu:75, tri:75, t3:70},
   seed:{ex:500, qu:500, tri:500, t3:500},
-  caps:{win:0, ex:1000, qu:1000, tri:1000, t3:500, self:500},
+  caps:{win:0, ex:1000, qu:1000, tri:1000, t3:500, self:1000},
   countdown:60,
   prizes:{prelim:[10,5], g1:[15,10], dobe:[5]},
   virtual:300,
@@ -582,7 +592,7 @@ function settings(exRid){
 /* 自動調整：払戻率と賞金％以外は、遊んだ記録から決める。
    - 見せ金（連系）：直近10レースの売上の中央値の2倍を買い目の数で割る（少なすぎると数枚で倍率が暴落するため）。
    - 仮の票（単勝）：直近10レースの単勝の売上の中央値の半分を4人で割る。どちらも3レース分たまるまでは初期値。
-   - 1人1レースの上限：今日配ったチップ（1人あたりの中央値）の10%（3連単と走者の自分単勝は5%）。
+   - 1人1レースの上限：今日配ったチップ（1人あたりの中央値）の10%（3連単は5%）。走者の自分単勝は10%で最大1000枚。
    - 締切カウントダウン：直近5レースで「＋30秒」が押された回数と「即締切」の割合から、30〜120秒で調整。 */
 let tuneCache={};
 function learnedTune(st, exRid){
@@ -604,7 +614,7 @@ function learnedTuneCalc(st, exRid){
   const gid=S.state&&S.state.gameId, given={};
   ((S.ledger&&S.ledger.entries)||[]).filter(e=>e.gameId===gid&&e.amt>0).forEach(e=>given[e.member]=(given[e.member]||0)+e.amt);
   const gv=Object.values(given);
-  if(gv.length){ const g=med(gv); out.caps={ex:rU(g*0.1), qu:rU(g*0.1), tri:rU(g*0.1), t3:rU(g*0.05), self:rU(g*0.05)}; out.from.caps=g; }
+  if(gv.length){ const g=med(gv); out.caps={ex:rU(g*0.1), qu:rU(g*0.1), tri:rU(g*0.1), t3:rU(g*0.05), self:Math.min(rU(g*0.1),rU(1000))}; out.from.caps=g; }
   const C=H.filter(x=>x.ext!=null).slice(-5);
   if(C.length>=3){ const ext=C.reduce((a,x)=>a+x.ext,0)/C.length, early=C.filter(x=>x.early).length/C.length;
     out.countdown=cl(Math.round((60+15*ext-15*early)/5)*5, 30, 120); out.from.countdown=C.length; }
@@ -942,7 +952,7 @@ function kart(i, num){
   </svg>`;
 }
 function badge(r,id){ const i=laneIdx(r,id); return `<span class="lanebadge c${i}">${i+1}</span>`; }
-function selHtml(r,m,sel,names){ const sep=MK[m].ordered?"→":"・"; return sel.map(id=>names?`<span class="selp">${badge(r,id)}<span class="selnm">${esc(sel.length>1?shortName(mname(id)):mname(id))}</span></span>`:badge(r,id)).join(`<span class="muted">${sep}</span>`); }
+function selHtml(r,m,sel,names,compact){ const sep=compact?"":(MK[m].ordered?"→":"・"); return sel.map(id=>names?`<span class="selp">${badge(r,id)}<span class="selnm">${esc(sel.length>1?shortName(mname(id)):mname(id))}</span></span>`:badge(r,id)).join(sep?`<span class="muted">${sep}</span>`:""); }
 /* 2人以上並べるときの短い名前：スペースがあれば前半（苗字）、なければ4文字以上は先頭2文字 */
 function shortName(n){ n=String(n||"").trim(); const sp=n.split(/[\s　]+/); if(sp.length>1) return sp[0]; return n.length>=4?n.slice(0,2):n; }
 function selText(r,m,sel){ const sep=MK[m].ordered?"→":"・"; return sel.map(id=>CIRC[laneIdx(r,id)]+mname(id)).join(sep); }
@@ -1064,7 +1074,7 @@ function helpPlayer(){
     <p>「受付中」のあいだに「投票」タブから買います。締切のあとは買えません。</p>
     <ol class="mlist"><li>タブで馬券の種類（単勝・連単など）を選ぶ</li><li>走る4人のカードから、賭ける人をタップ（連単・3連単は1着の人から順に。もう一度タップで解除）</li><li>一番下の「−」「＋」で枚数を決める。真ん中の数字を押すと、枚数を直接入力することもできる（${unit()}枚単位にそろえられます）。「当たれば ○枚」と目安が出る</li><li>「賭ける！」を押す</li></ol>
     ${mImg("p_bet.jpg","左：単勝で藤村を選び60枚にしたところ。右：賭けたあと「このレースの馬券」に並んだところ")}
-    <ul class="mlist"><li>締切前なら「このレースの馬券」の「取消」で取り消せて、チップも戻ります。</li><li>1レースで何枚でも、何種類でも買えます（上限は「馬券の種類」の表）。</li></ul>`)}</div>
+    <ul class="mlist"><li>連単・連複・3連複・3連単を選ぶと、全部の組み合わせの倍率が低い順に一覧で出ます。一覧を押すと、その組み合わせが選ばれます。</li><li>締切前なら「このレースの馬券」の「取消」で取り消せて、チップも戻ります。</li><li>1レースで何枚でも、何種類でも買えます（上限は「馬券の種類」の表）。</li></ul>`)}</div>
   <div id="m-run">${mSec("自分が走るとき","RACER",`
     <p>自分の番の1つ前のレースで「次のレースはあなたの出番！」と出ます。画面に出た番号のコントローラーで走ってください（1P 赤・2P 青・3P 緑・4P 黄）。</p>
     ${mImg("p_runner.jpg","左：自分が走るときの画面。右：1着で賞金をもらったところ")}
@@ -1164,7 +1174,7 @@ function helpAdmin(){
     ${mImg("data.jpg","CSVの保存とリセット")}
     <ul class="mlist"><li>リセットで消えるのは、今日のメンバー・チップ・出走表・馬券です。</li><li>名簿、これまでの成績、ルール設定は消えません。</li><li>試しに遊んだあとも、リセットしてから本番を始めてください。</li></ul>
     <h3>ルール設定（自動で調整されます）</h3>
-    <p>ふだんは触らなくて大丈夫です。管理画面の「ルール設定」を開くと、払戻率と賞金の％だけ手で変えられます。</p><ul class="mlist"><li>見せ金・単勝の仮の票：直近のレースの合計から自動で調整（3レース分たまるまでは初期値）</li><li>1人1レースの上限：今日配ったチップの10%（3連単と走者の自分単勝は5%）</li><li>締切カウントダウン：「＋30秒」をよく押すと長く、「即締切」が多いと短く（30〜120秒）</li><li>賭けの単位は100枚（1枚＝1円）で固定</li></ul>`)}</div>
+    <p>ふだんは触らなくて大丈夫です。管理画面の「ルール設定」を開くと、払戻率と賞金の％だけ手で変えられます。</p><ul class="mlist"><li>見せ金・単勝の仮の票：直近のレースの合計から自動で調整（3レース分たまるまでは初期値）</li><li>1人1レースの上限：今日配ったチップの10%（3連単は5%。走る人の自分の単勝は10%で、最大1000枚）</li><li>締切カウントダウン：「＋30秒」をよく押すと長く、「即締切」が多いと短く（30〜120秒）</li><li>賭けの単位は100枚（1枚＝1円）で固定</li></ul>`)}</div>
   </div>`;
 }
 function renderHelp(){
@@ -1240,7 +1250,7 @@ function renderBoard(){
   const exM = `<div class="panel"><h2>連単 <span class="tag">EXACTA · 1着↓ 2着→</span></h2><div class="scroll"><table class="mx"><tr><th></th>${r.runners.map((id,j)=>`<th>${badge(r,id)}</th>`).join("")}</tr>
     ${r.runners.map(a=>`<tr><th>${badge(r,a)}</th>${r.runners.map(b=>{ if(a===b) return `<td class="x"></td>`; const k=keyOf("ex",[a,b]), e=O.odds.ex[k]; return `<td class="${fc("ex",k)} ${e.pop?"hot":""}">${fmtO(e.v)}</td>`; }).join("")}</tr>`).join("")}</table></div></div>`;
   const listM=(m,top)=>{ const arr=Object.entries(O.odds[m]).sort((a,b)=>a[1].v-b[1].v).slice(0,top||99);
-    return `<div class="panel"><h2>${MK[m].label} <span class="tag">${MK[m].help}</span></h2><div class="olist">${arr.map(([k,e])=>`<div class="oitem"><span class="sel">${selHtml(r,m,e.sel)}</span><span class="v ${fc(m,k)}">${fmtO(e.v)}</span></div>`).join("")}</div></div>`; };
+    return `<div class="panel"><h2>${MK[m].label} <span class="tag">${MK[m].help}</span></h2><div class="olist ${MK[m].n===3?"n3":""}">${arr.map(([k,e])=>`<div class="oitem"><span class="sel">${selHtml(r,m,e.sel,false,true)}</span><span class="v ${fc(m,k)}">${fmtO(e.v)}</span></div>`).join("")}</div></div>`; };
   const sales=ms.map(m=>`<div><small>${MK[m].label}</small><span class="num">${O.pools[m].total}</span></div>`).join("");
   const total=ms.reduce((a,m)=>a+O.pools[m].total,0);
   const timer = r.status==="countdown" ? `<div class="timer ${rem<=10?"hot":""}" data-cd="${r.id}">${mmss(rem)}</div>` : statusPill(r);
@@ -1430,7 +1440,14 @@ function renderBet(){
     <div class="rcards">${cards}</div>
     ${live?marksPanel(r,me):""}
     ${live?`<div class="tabs">${tabs}</div><p class="hint">${MK[m].ordered&&n>1?"1着から順番にタップ":"タップで選択"}（もう一度タップで解除）</p>`:""}
+    ${live&&n>1?phoneOddsList(r,O,m,sel):""}
     ${live?myList:""}${bar}</div>`;
+}
+/* スマホ：連単・連複などを選んだとき、全部の組み合わせの倍率を一覧に（押すとその組み合わせを選ぶ） */
+function phoneOddsList(r,O,m,sel){
+  const cur=sel.length===MK[m].n?keyOf(m,sel):null;
+  const arr=Object.entries(O.odds[m]).sort((a,b)=>(a[1].v||1e9)-(b[1].v||1e9));
+  return `<div class="podds"><div class="pot">${MK[m].label}の倍率 <span class="muted">（低い順・押すと選べます）</span></div><div class="pol">${arr.map(([k,e])=>`<button class="poi ${k===cur?"on":""}" data-act="pickCombo" data-m="${m}" data-k="${k}"><span class="sel">${selHtml(r,m,e.sel,true)}</span><b class="num ${fc(m,k)}">${e.v?fmtO(e.v):"-"}</b></button>`).join("")}</div></div>`;
 }
 /* 自分の馬券の行：種類と選んだ人／枚数×倍率／当たればいくら（結果が出たら的中・はずれ） */
 function myTicketRows(r,mine,O,done){
@@ -1652,7 +1669,7 @@ function adminSettings(){
     <div class="scroll"><table class="tbl"><tr><th>項目</th><th class="r">いまの値</th><th>決め方</th></tr>
       <tr><td>見せ金（1買い目）${tag("seed")}</td><td class="r">連単${st.seed.ex}・連複${st.seed.qu}・3連複${st.seed.tri}・3連単${st.seed.t3}</td><td class="muted" style="font-size:12px">合計が直近の合計の2倍くらいになるように</td></tr>
       <tr><td>単勝の仮の票（1人あたり）${tag("virtual")}</td><td class="r">${st.virtual}</td><td class="muted" style="font-size:12px">直近の単勝の合計の半分くらいになるように</td></tr>
-      <tr><td>1人1レースの上限 ${tag("caps")}</td><td class="r">連単・連複・3連複${st.caps.ex}・3連単${st.caps.t3}・走者の自分単勝${st.caps.self}</td><td class="muted" style="font-size:12px">配ったチップの10%（3連単と自分単勝は5%）</td></tr>
+      <tr><td>1人1レースの上限 ${tag("caps")}</td><td class="r">連単・連複・3連複${st.caps.ex}・3連単${st.caps.t3}・走者の自分単勝${st.caps.self}</td><td class="muted" style="font-size:12px">配ったチップの10%（3連単は5%、自分単勝は最大1000枚）</td></tr>
       <tr><td>締切カウントダウン ${tag("countdown")}</td><td class="r">${st.countdown}秒</td><td class="muted" style="font-size:12px">「＋30秒」が多ければ長く、「即締切」が多ければ短く</td></tr>
       <tr><td>賭けの単位</td><td class="r">${st.unit}枚</td><td class="muted" style="font-size:12px">固定（1枚＝1円）</td></tr>
     </table></div>
@@ -1677,6 +1694,7 @@ const A={
   claim(d){ const id=d.id; S.ui.claimOpen=false; mutateBets(S.uid, b=>{ b.member=id; b.tickets=b.tickets||[]; }); },
   sound(){ SFX.on=!SFX.on; try{ localStorage.setItem("mk_sound",SFX.on?"1":"0"); }catch(e){} if(SFX.on){ audio(); play("coin"); } render(); },
   celClose(){ S.cel=null; render(); },
+  pickCombo(d){ const r=curRace(); if(!r) return; const e=computeOdds(r,raceTickets(r)).odds[d.m][d.k]; if(!e) return; S.ui.m=d.m; S.ui.sel=e.sel.slice(); render(); },
   btab(d){ S.ui.btab=d.t; render(); },
   mjump(d){ const el=document.getElementById(d.id); if(el) el.scrollIntoView({behavior:"smooth",block:"start"}); },
   stScope(d){ S.ui.stScope=d.s; render(); },

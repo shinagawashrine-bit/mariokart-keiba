@@ -278,7 +278,7 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .betbar .btn.sm{background:#2c2c33;color:#fff;box-shadow:none}
 .amt{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .amt .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:36px;min-width:1.8em;text-align:center;line-height:1}
-.amtin{width:2.5em;font-size:32px!important;background:transparent;color:inherit;border:0;border-bottom:2px dashed currentColor;padding:0 2px;-moz-appearance:textfield;appearance:textfield}
+.amtin{width:2.5em;font-size:32px!important;background:transparent;color:inherit;border:0;padding:0 2px;-moz-appearance:textfield;appearance:textfield}
 .amtin::-webkit-outer-spin-button,.amtin::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .amtin:focus{outline:2px solid var(--yellow);outline-offset:2px}
 .betbar .num[style]{color:var(--yellow)!important}
@@ -355,6 +355,11 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .orderpick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 .orderpick button{padding:10px 6px;background:var(--lt);border-top:4px solid var(--lc);display:grid;gap:4px;justify-items:center;position:relative;font-weight:900;font-style:italic}
 .orderpick button .pos{position:absolute;top:4px;right:4px;background:var(--carbon);color:#fff;font-family:var(--f-num);font-weight:800;font-style:italic;padding:1px 10px 1px 6px;font-size:14px;clip-path:var(--cut)}
+.panel > h2.foldh{cursor:pointer}
+.panel > h2.foldh::after{content:"▲ 閉じる";margin-left:auto;font-size:11px;font-style:normal;font-weight:700;color:#b9b9c2;letter-spacing:0}
+.panel.folded > h2.foldh{margin-bottom:-16px}
+.panel.folded > h2.foldh::after{content:"▼ 開く"}
+.panel.folded > :not(h2){display:none!important}
 .foldsum{cursor:pointer;list-style:none;font-size:17px;font-weight:900;font-style:italic;display:flex;align-items:center;gap:10px;margin:-16px -16px 0;padding:8px 16px;background:var(--carbon);color:#fff}
 .foldsum::-webkit-details-marker{display:none}
 .foldsum::after{content:"▼ 開く";margin-left:auto;font-size:11px;font-style:normal;color:#b9b9c2}
@@ -490,6 +495,8 @@ body[data-race="dobe"] .qr .code{background:#fff}
 .final .plus{color:#3ee08a}.final .minus{color:#ff6b6b}
 .fire{display:inline-block;padding:1px 8px;background:#ff5a00;color:#fff;font-weight:900;font-style:italic;font-size:12px;clip-path:var(--cut);white-space:nowrap}
 .mks{font-weight:900;color:var(--ink);font-size:13px}
+.ninki.ai{background:#2b6cff;color:#fff}
+.ailine{font-size:14px;font-weight:800;margin:2px 0 8px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .ninki.honmei{background:var(--carbon);color:var(--yellow)}
 .mpanel{background:var(--paper);padding:10px 12px;display:grid;gap:6px}
 .mpanel .mt{font-weight:900;font-style:italic;font-size:14px}
@@ -677,6 +684,17 @@ function streak(id){
   let n=0; races().filter(r=>r.settle&&r.settle.order.includes(id)).forEach(r=>{ n = r.settle.order[0]===id ? n+1 : 0; }); return n;
 }
 function fire(id){ const n=streak(id); return n>=2 ? `<span class="fire">🔥${n}連勝中</span>` : ""; }
+/* AI予想：通算の着順ポイント（少ない出走は平均に寄せる）＋直近3走の調子で順位を付け、◎○▲ */
+function aiMarks(r){
+  const ps=pstats(null, r.id), tb=id=>(mem(id)||{}).tb||0, sc={};
+  r.runners.forEach(id=>{ const s=ps[id]; let pts=0,n=0; if(s) s.ranks.forEach((c,i)=>{ pts+=c*(4-i); n+=c; });
+    const base=(pts+2.5*3)/(n+3), rec=s?s.recent.slice(-3):[], recent=(rec.reduce((a,x)=>a+(5-x),0)+2.5)/(rec.length+1);
+    sc[id]=base+0.5*(recent-2.5)+tb(id)*1e-3; });
+  const o=r.runners.slice().sort((a,b)=>sc[b]-sc[a]), runs=r.runners.reduce((a,id)=>a+((ps[id]||{}).runs||0),0);
+  const mk={}; mk[o[0]]="◎"; mk[o[1]]="○"; mk[o[2]]="▲";
+  return {h:o[0], t:o[1], a:o[2], mk, thin:runs<4};
+}
+function aiTag(r,id){ const m=aiMarks(r).mk[id]; return m?`<span class="ninki ai">AI${m}</span>`:""; }
 function marksAgg(r){
   const agg={}; r.runners.forEach(id=>agg[id]={h:0,t:0,a:0,pts:0});
   Object.values(S.bets).forEach(d=>{ const mk=d.marks&&d.marks[r.id]; if(!mk||!d.member||r.runners.includes(d.member)) return;
@@ -1094,7 +1112,7 @@ function helpPlayer(){
     <tr><td><b>連複</b></td><td>1・2着の2人（順不同）</td><td>すべて</td><td class="r">${settings().caps.qu||"なし"}${settings().caps.qu?"枚":""}</td></tr>
     <tr><td><b>3連複</b></td><td>1〜3着の3人（順不同）＝D当て</td><td>すべて</td><td class="r">${settings().caps.tri||"なし"}${settings().caps.tri?"枚":""}</td></tr>
     <tr><td><b>3連単</b></td><td>1→2→3着を順番どおり</td><td>決勝のみ</td><td class="r">${settings().caps.t3||"なし"}${settings().caps.t3?"枚":""}</td></tr></table></div>
-    <ul class="mlist"><li>倍率（オッズ）はみんなの賭け方で締切まで動きます。人気が集まる人ほど下がります。</li><li>誰も賭けていない人の倍率には「参考」と付きます。これまでの成績から出した予想の倍率で、強い人ほど低くなります。</li><li>払い戻しは「賭けた枚数 × 倍率」。1枚未満は切り捨てです。</li><li>予想の印（◎本命・○対抗・▲単穴）も付けられます。チップは使いません。大画面に「みんなの本命」が出ます。</li></ul>
+    <ul class="mlist"><li>倍率（オッズ）はみんなの賭け方で締切まで動きます。人気が集まる人ほど下がります。</li><li>誰も賭けていない人の倍率には「参考」と付きます。これまでの成績から出した予想の倍率で、強い人ほど低くなります。</li><li>払い戻しは「賭けた枚数 × 倍率」。1枚未満は切り捨てです。</li><li>予想の印（◎本命・○対抗・▲単穴）も付けられます。チップは使いません。大画面に「みんなの本命」が出ます。</li><li>青い「AI◎」「AI○」「AI▲」は、これまでの成績と直近の調子からアプリが出した予想です（予想の印の欄にも「AI予想」として出ます）。</li></ul>
     ${mImg("p_marks.jpg","予想の印の入力欄。行ごとに選手の番号をタップ")}`)}</div>
   <div id="m-bet">${mSec("投票のしかた","HOW TO BET",`
     <p>「受付中」のあいだに「投票」タブから買います。締切のあとは買えません。</p>
@@ -1192,7 +1210,7 @@ function helpAdmin(){
     <ul class="mlist"><li>途中参加・離脱・復帰のたびに、まだ始まっていない予選が自動で組み直されます。</li><li>今のレースを走っている人は、終わるまで離脱できません。</li><li>管理画面を閉じてもデータは消えません。開き直せば続きから進められます。</li></ul>`)}</div>
   <div id="a-after">${mSec("終わったあと","AFTER",`
     <h3>成績表と胴元の収支</h3>
-    <p>「胴元の収支」「ルール設定」「成績表」「データ」は、ふだんは見出しだけになっています。見出しを押すと開き、もう一度押すと閉じます。</p><p>「全員の成績表を開く」で名簿全員の成績と今日の馬券成績が見られます。「胴元の収支」はレースごとの売上と胴元のもうけで、管理画面にだけ出ます。</p>
+    <p>管理画面の黒い見出しは、どれも押すとたためます（もう一度押すと開きます）。「胴元の収支」「ルール設定」「成績表」「データ」は、最初からたたんであります。</p><p>「全員の成績表を開く」で名簿全員の成績と今日の馬券成績が見られます。「胴元の収支」はレースごとの売上と胴元のもうけで、管理画面にだけ出ます。</p>
     ${mImg("a_stats.jpg","成績表")}
     ${mImg("house.jpg","胴元の収支")}
     <h3>CSVの保存とリセット</h3>
@@ -1229,6 +1247,9 @@ function render(){
   else if(md==="adminhelp") html=renderAdminHelp();
   else html=renderAdmin();
   app.innerHTML=html;
+  if(md==="admin"){ const seen={}; document.querySelectorAll("#app .admin .panel > h2").forEach(h=>{ const t=(h.childNodes[0]&&h.childNodes[0].textContent||"").trim(); if(!t) return; seen[t]=(seen[t]||0)+1; const k=seen[t]>1?t+seen[t]:t;
+    h.dataset.act="foldPanel"; h.dataset.k=k; h.classList.add("foldh"); h.setAttribute("role","button"); h.tabIndex=0;
+    if((S.ui.foldH||{})[k]) h.parentElement.classList.add("folded"); }); }
   const cr=S.ready&&S.state&&!S.noDb?curRace():null;
   document.body.dataset.race = (md==="board"||md==="bet")&&cr ? cr.type : "";
   if(aid){ const el=document.getElementById(aid); if(el){ el.focus(); try{ if(selS!=null) el.setSelectionRange(selS,selS); }catch(e){} } }
@@ -1266,7 +1287,7 @@ function renderBoard(){
       <div class="gate"><span>${i+1}<small>P</small></span></div>
       <div>${kart(i,i+1)}</div>
       <div class="who"><div class="nm">${esc(mname(id))}</div>
-        <div class="meta"><span class="ninki ${rank[id]===1?"n1":""}">${rank[id]}番人気</span><span>単勝票 <b class="num">${O.pools.win.by[id]||0}</b> 枚</span>${res?`<span class="ninki n1">${res}着</span>`:""}${fire(id)}${MA.agg[id].pts?`<span class="mks">◎${MA.agg[id].h} ○${MA.agg[id].t} ▲${MA.agg[id].a}</span>`:""}${MA.top===id?`<span class="ninki honmei">みんなの本命</span>`:""}</div>
+        <div class="meta"><span class="ninki ${rank[id]===1?"n1":""}">${rank[id]}番人気</span><span>単勝票 <b class="num">${O.pools.win.by[id]||0}</b> 枚</span>${res?`<span class="ninki n1">${res}着</span>`:""}${fire(id)}${MA.agg[id].pts?`<span class="mks">◎${MA.agg[id].h} ○${MA.agg[id].t} ▲${MA.agg[id].a}</span>`:""}${MA.top===id?`<span class="ninki honmei">みんなの本命</span>`:""}${aiTag(r,id)}</div>
         ${formHtml(id)}
         <div class="share"><i style="width:${share}%"></i></div></div>
       <div class="odds"><div class="l">単勝</div><div class="v ${fc("win",id)}">${o.est?`<span class="est">参考</span> `:""}${fmtO(o.v)}</div></div>
@@ -1436,7 +1457,7 @@ function renderBet(){
     return `<button class="rcard c${i} ${pos>=0?"sel":""}" data-act="pick" data-id="${id}" ${live?"":"disabled"}>
       ${pos>=0?`<span class="pos">${MK[m].ordered&&n>1?(pos+1)+"着":"✓"}</span>`:""}
       <div class="top"><span class="lanebadge c${i}">${i+1}</span><span class="nm">${esc(mname(id))}</span></div>
-      ${formMini(id)}
+      ${formMini(id)}${aiTag(r,id)?`<div style="margin-top:2px">${aiTag(r,id)}</div>`:""}
       <div class="kwrap">${kart(i,i+1)}</div>
       <div class="o ${fc("win",id)}"><span class="muted" style="font-size:11px;font-family:var(--f-body)">単勝</span> ${o.est?'<span class="est">参考</span>':""}${fmtO(o.v)}</div>
     </button>`;
@@ -1464,9 +1485,9 @@ function renderBet(){
   return `<div class="bet">${head}${topTabs}${finalCard(me)}${nextUp}${banner}${closedMsg}
     ${live?"":myTicketsClosed(r,me,O,mine)}
     <div class="rcards">${cards}</div>
-    ${live?marksPanel(r,me):""}
     ${live?`<div class="tabs">${tabs}</div><p class="hint">${MK[m].ordered&&n>1?"1着から順番にタップ":"タップで選択"}（もう一度タップで解除）</p>`:""}
     ${live&&n>1?phoneOddsList(r,O,m,sel):""}
+    ${live?marksPanel(r,me):""}
     ${live?myList:""}${bar}</div>`;
 }
 /* スマホ：連単・連複などを選んだとき、全部の組み合わせの倍率を一覧に（押すとその組み合わせを選ぶ） */
@@ -1491,7 +1512,8 @@ function myTicketsClosed(r,me,O,mine){
 }
 function marksPanel(r,me){
   const d=S.bets[S.uid]||{}, mk=(d.marks&&d.marks[r.id])||{};
-  return `<div class="mpanel"><div class="mt">予想の印 <span class="muted">（オッズ画面に「みんなの本命」が出ます）</span></div>${[["h","◎","本命"],["t","○","対抗"],["a","▲","単穴"]].map(([k,s,l])=>`<div class="mrow"><span class="mk">${s}<small>${l}</small></span>${r.runners.map((id,i)=>`<button class="mbtn c${i} ${mk[k]===id?"on":""}" data-act="mark" data-k="${k}" data-id="${id}">${i+1}</button>`).join("")}</div>`).join("")}</div>`;
+  const ai=aiMarks(r);
+  return `<div class="mpanel"><div class="mt">予想の印 <span class="muted">（オッズ画面に「みんなの本命」が出ます）</span></div><div class="ailine"><span class="ninki ai">AI予想</span> ◎${esc(shortName(mname(ai.h)))}　○${esc(shortName(mname(ai.t)))}　▲${esc(shortName(mname(ai.a)))}${ai.thin?'<span class="muted" style="font-size:11px">（データ少なめ）</span>':""}</div>${[["h","◎","本命"],["t","○","対抗"],["a","▲","単穴"]].map(([k,s,l])=>`<div class="mrow"><span class="mk">${s}<small>${l}</small></span>${r.runners.map((id,i)=>`<button class="mbtn c${i} ${mk[k]===id?"on":""}" data-act="mark" data-k="${k}" data-id="${id}">${i+1}</button>`).join("")}</div>`).join("")}</div>`;
 }
 function resultMine(r,me){
   if(r.status!=="done"||!r.settle) return "";
@@ -1724,6 +1746,7 @@ const A={
   fullscreen(){ const d=document, el=d.documentElement;
     if(fsEl()){ (d.exitFullscreen||d.webkitExitFullscreen).call(d); return; }
     const f=el.requestFullscreen||el.webkitRequestFullscreen; if(f){ try{ const p=f.call(el); if(p&&p.catch) p.catch(()=>toast("全画面にできませんでした")); }catch(e){ toast("全画面にできませんでした"); } } },
+  foldPanel(d){ const f=S.ui.foldH=S.ui.foldH||{}; f[d.k]=!f[d.k]; render(); },
   btab(d){ S.ui.btab=d.t; render(); },
   mjump(d){ const el=document.getElementById(d.id); if(el) el.scrollIntoView({behavior:"smooth",block:"start"}); },
   stScope(d){ S.ui.stScope=d.s; render(); },

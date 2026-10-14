@@ -267,6 +267,9 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .betbar .btn.sm{background:#2c2c33;color:#fff;box-shadow:none}
 .amt{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .amt .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:36px;min-width:1.8em;text-align:center;line-height:1}
+.amtin{width:2.5em;font-size:32px!important;background:transparent;color:inherit;border:0;border-bottom:2px dashed currentColor;padding:0 2px;-moz-appearance:textfield;appearance:textfield}
+.amtin::-webkit-outer-spin-button,.amtin::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.amtin:focus{outline:2px solid var(--yellow);outline-offset:2px}
 .betbar .num[style]{color:var(--yellow)!important}
 .mytix{display:grid;gap:4px}
 .mybox{background:var(--paper);display:grid;margin:10px 0;box-shadow:0 8px 24px -16px #00000066;text-align:left}
@@ -725,7 +728,7 @@ function isLive(r){ return r && (r.status==="open" || (r.status==="countdown" &&
 function remain(r){ return r && r.status==="countdown" ? Math.max(0, Math.ceil((r.closeAt-now())/1000)) : null; }
 function unit(){ return Math.max(1,settings().unit||1); }
 function clampAmt(a,max){ const U=unit(); let v=Math.max(U,Math.floor(a/U)*U); const mU=Math.floor(max/U)*U; if(mU>=U) v=Math.min(v,mU); return v; }
-function amtButtons(v){ const U=unit(); return `<div class="amt"><button class="btn sm" data-act="amt" data-d="${-U}">−${U}</button><span class="v">${v}</span><button class="btn sm" data-act="amt" data-d="${U}">+${U}</button><button class="btn sm" data-act="amt" data-d="${U*5}">+${U*5}</button><button class="btn sm" data-act="amt" data-d="${U*10}">+${U*10}</button></div>`; }
+function amtButtons(v){ const U=unit(); return `<div class="amt"><button class="btn sm" data-act="amt" data-d="${-U}">−${U}</button><input id="amtInput" class="v amtin" type="number" inputmode="numeric" min="${U}" step="${U}" value="${S.ui.amtRaw!=null?esc(S.ui.amtRaw):v}" data-bind="amt" aria-label="賭ける枚数（押すと入力できます）"><button class="btn sm" data-act="amt" data-d="${U}">+${U}</button><button class="btn sm" data-act="amt" data-d="${U*5}">+${U*5}</button><button class="btn sm" data-act="amt" data-d="${U*10}">+${U*10}</button></div>`; }
 function mmss(s){ return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; }
 
 /* ---------------- tickets / money ---------------- */
@@ -1059,7 +1062,7 @@ function helpPlayer(){
     ${mImg("p_marks.jpg","予想の印の入力欄。行ごとに選手の番号をタップ")}`)}</div>
   <div id="m-bet">${mSec("投票のしかた","HOW TO BET",`
     <p>「受付中」のあいだに「投票」タブから買います。締切のあとは買えません。</p>
-    <ol class="mlist"><li>タブで馬券の種類（単勝・連単など）を選ぶ</li><li>走る4人のカードから、賭ける人をタップ（連単・3連単は1着の人から順に。もう一度タップで解除）</li><li>一番下の「−」「＋」で枚数を決める。「当たれば ○枚」と目安が出る</li><li>「賭ける！」を押す</li></ol>
+    <ol class="mlist"><li>タブで馬券の種類（単勝・連単など）を選ぶ</li><li>走る4人のカードから、賭ける人をタップ（連単・3連単は1着の人から順に。もう一度タップで解除）</li><li>一番下の「−」「＋」で枚数を決める。真ん中の数字を押すと、枚数を直接入力することもできる（${unit()}枚単位にそろえられます）。「当たれば ○枚」と目安が出る</li><li>「賭ける！」を押す</li></ol>
     ${mImg("p_bet.jpg","左：単勝で藤村を選び60枚にしたところ。右：賭けたあと「このレースの馬券」に並んだところ")}
     <ul class="mlist"><li>締切前なら「このレースの馬券」の「取消」で取り消せて、チップも戻ります。</li><li>1レースで何枚でも、何種類でも買えます（上限は「馬券の種類」の表）。</li></ul>`)}</div>
   <div id="m-run">${mSec("自分が走るとき","RACER",`
@@ -1684,9 +1687,10 @@ const A={
   tab(d){ S.ui.m=d.m; S.ui.sel=[]; render(); },
   pick(d){ const m=S.ui.m, n=MK[m].n, s=S.ui.sel, i=s.indexOf(d.id);
     if(i>=0) s.splice(i,1); else if(n===1) S.ui.sel=[d.id]; else if(s.length<n) s.push(d.id); render(); },
-  amt(d){ S.ui.amt=Math.max(unit(),(S.ui.amt||unit())+(+d.d)); render(); },
+  amt(d){ if(S.ui.amtRaw!=null) normalizeAmt(); S.ui.amt=Math.max(unit(),(S.ui.amt||unit())+(+d.d)); render(); },
   bet(){
     const r=curRace(), me=myMember(); if(!r||!me||!isLive(r)) return;
+    if(S.ui.amtRaw!=null) normalizeAmt(document.getElementById("amtInput"));
     const m=S.ui.m, sel=S.ui.sel.slice(), amt=S.ui.amt;
     if(amt%unit()){ toast(`${unit()}枚単位で賭けてね`); return; }
     if(sel.length!==MK[m].n) return;
@@ -1698,6 +1702,7 @@ const A={
   },
   betSelf(){
     const r=curRace(), me=myMember(); if(!r||!me||!isLive(r)||!r.runners.includes(me)) return;
+    if(S.ui.amtRaw!=null) normalizeAmt(document.getElementById("amtInput"));
     const cap=settings().caps.self||0, amt=S.ui.amt;
     if(amt%unit()){ toast(`${unit()}枚単位で賭けてね`); return; }
     const used=raceTickets(r).filter(t=>t.member===me&&t.m==="win").reduce((a,t)=>a+t.amt,0);
@@ -1852,12 +1857,23 @@ document.addEventListener("click",e=>{
 });
 document.addEventListener("input",e=>{
   const b=e.target.dataset&&e.target.dataset.bind; if(!b) return;
+  if(b==="amt"){ S.ui.amtRaw=e.target.value; S.ui.amt=parseInt(e.target.value,10)||0; return; }
   if(b==="proxyMember") S.ui.proxyMember=e.target.value;
   else if(b==="pamt") S.ui.pamt=e.target.value;
   else S.ui.form[b]=e.target.value;
   if(b==="proxyMember") render();
 });
-document.addEventListener("change",e=>{ if(e.target.dataset&&e.target.dataset.bind==="proxyMember"){ S.ui.proxyMember=e.target.value; render(); } });
+document.addEventListener("change",e=>{
+  if(e.target.dataset&&e.target.dataset.bind==="proxyMember"){ S.ui.proxyMember=e.target.value; render(); }
+  if(e.target.id==="amtInput"){ normalizeAmt(e.target); setTimeout(()=>{ if(document.activeElement!==e.target) render(); },400); }
+});
+/* 手入力した枚数を、賭けの単位（100枚）に合わせる */
+function normalizeAmt(el){
+  const U=unit(), raw=parseInt(S.ui.amtRaw!=null?S.ui.amtRaw:(el?el.value:S.ui.amt),10)||0;
+  const v=Math.max(U,Math.floor(raw/U)*U); S.ui.amtRaw=null; S.ui.amt=v; if(el) el.value=v;
+  if(raw!==v) toast(`${U}枚単位にして ${v}枚にしました`);
+  return v;
+}
 document.addEventListener("keydown",e=>{ if(e.isComposing||e.keyCode===229) return; if(e.key==="Enter"&&e.target.id==="adminPin") A.pin(); if(e.target.id&&e.target.id.startsWith("rename_")){ if(e.key==="Enter") A.renameSave({id:e.target.id.slice(7)}); else if(e.key==="Escape") A.renameCancel(); } });
 window.addEventListener("hashchange",()=>{ S.lastOverlayKey=""; render(); });
 // 裏に回っていたタブが表に出たら、最新の状態で描き直す（大画面の結果がすぐ出るように）

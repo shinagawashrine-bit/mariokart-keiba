@@ -610,7 +610,7 @@ function settings(exRid){
   ["ex","qu","tri","t3"].forEach(m=>{ if(L.seed[m]!=null) st.seed[m]=L.seed[m]; });
   if(L.virtual!=null) st.virtual=L.virtual;
   if(L.caps) Object.assign(st.caps, L.caps);
-  { const U=st.unit||1, cap=Math.max(U, Math.round(1000/U)*U); ["ex","qu","tri","t3","self"].forEach(m=>st.caps[m]=cap); } // 単勝以外と走者の自分単勝は、いつでも1000枚まで
+  { const U=st.unit||1, ten=Math.floor((L.given||0)*0.1/U)*U, cap=Math.max(Math.round(1000/U)*U, ten, U); ["ex","qu","tri","t3","self"].forEach(m=>st.caps[m]=cap); } // 単勝以外と走者の自分単勝：1000枚か、配ったチップの10%の多いほう
   if(L.countdown!=null) st.countdown=L.countdown;
   st.learned=L.from;
   return st;
@@ -639,6 +639,7 @@ function learnedTuneCalc(st, exRid){
   const gid=S.state&&S.state.gameId, given={};
   ((S.ledger&&S.ledger.entries)||[]).filter(e=>e.gameId===gid&&e.amt>0).forEach(e=>given[e.member]=(given[e.member]||0)+e.amt);
   const gv=Object.values(given);
+  if(gv.length){ out.given=med(gv); }
   const C=H.filter(x=>x.ext!=null).slice(-5);
   if(C.length>=3){ const ext=C.reduce((a,x)=>a+x.ext,0)/C.length, early=C.filter(x=>x.early).length/C.length;
     out.countdown=cl(Math.round((60+15*ext-15*early)/5)*5, 30, 120); out.from.countdown=C.length; }
@@ -1217,7 +1218,7 @@ function helpAdmin(){
     ${mImg("data.jpg","CSVの保存とリセット")}
     <ul class="mlist"><li>リセットで消えるのは、今日のメンバー・チップ・出走表・馬券です。</li><li>名簿、これまでの成績、ルール設定は消えません。</li><li>試しに遊んだあとも、リセットしてから本番を始めてください。</li></ul>
     <h3>ルール設定（自動で調整されます）</h3>
-    <p>ふだんは触らなくて大丈夫です。管理画面の「ルール設定」を開くと、払戻率と賞金の％だけ手で変えられます。</p><ul class="mlist"><li>見せ金・単勝の仮の票：直近のレースの合計から自動で調整（3レース分たまるまでは初期値）</li><li>1人1レースの上限：連単・連複・3連複・3連単と、走る人の自分の単勝は、いつでも1000枚まで（単勝は上限なし）</li><li>締切カウントダウン：「＋30秒」をよく押すと長く、「即締切」が多いと短く（30〜120秒）</li><li>賭けの単位は100枚（1枚＝1円）で固定</li></ul>`)}</div>
+    <p>ふだんは触らなくて大丈夫です。管理画面の「ルール設定」を開くと、払戻率と賞金の％だけ手で変えられます。</p><ul class="mlist"><li>見せ金・単勝の仮の票：直近のレースの合計から自動で調整（3レース分たまるまでは初期値）</li><li>1人1レースの上限：連単・連複・3連複・3連単と、走る人の自分の単勝は、1000枚か「配ったチップの10%」の多いほう（単勝は上限なし）</li><li>締切カウントダウン：「＋30秒」をよく押すと長く、「即締切」が多いと短く（30〜120秒）</li><li>賭けの単位は100枚（1枚＝1円）で固定</li></ul>`)}</div>
   </div>`;
 }
 function renderHelp(){
@@ -1716,7 +1717,7 @@ function adminSettings(){
     <div class="scroll"><table class="tbl"><tr><th>項目</th><th class="r">いまの値</th><th>決め方</th></tr>
       <tr><td>見せ金（1買い目）${tag("seed")}</td><td class="r">連単${st.seed.ex}・連複${st.seed.qu}・3連複${st.seed.tri}・3連単${st.seed.t3}</td><td class="muted" style="font-size:12px">合計が直近の合計の2倍くらいになるように</td></tr>
       <tr><td>単勝の仮の票（1人あたり）${tag("virtual")}</td><td class="r">${st.virtual}</td><td class="muted" style="font-size:12px">直近の単勝の合計の半分くらいになるように</td></tr>
-      <tr><td>1人1レースの上限</td><td class="r">連単・連複・3連複・3連単・走者の自分単勝 各${st.caps.ex}</td><td class="muted" style="font-size:12px">固定（いつでも1000枚）。単勝は上限なし</td></tr>
+      <tr><td>1人1レースの上限</td><td class="r">連単・連複・3連複・3連単・走者の自分単勝 各${st.caps.ex}</td><td class="muted" style="font-size:12px">1000枚か、配ったチップの10%の多いほう。単勝は上限なし</td></tr>
       <tr><td>締切カウントダウン ${tag("countdown")}</td><td class="r">${st.countdown}秒</td><td class="muted" style="font-size:12px">「＋30秒」が多ければ長く、「即締切」が多ければ短く</td></tr>
       <tr><td>賭けの単位</td><td class="r">${st.unit}枚</td><td class="muted" style="font-size:12px">固定（1枚＝1円）</td></tr>
     </table></div>

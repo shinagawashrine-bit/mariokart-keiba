@@ -260,6 +260,10 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .amt .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:36px;min-width:1.8em;text-align:center;line-height:1}
 .betbar .num[style]{color:var(--yellow)!important}
 .mytix{display:grid;gap:4px}
+.selp{display:inline-flex;align-items:center;white-space:nowrap}
+.selnm{font-weight:800;margin:0 2px 0 4px;white-space:nowrap}
+.tline>span:first-child,.mytix .tl>span:first-child{flex-wrap:wrap;min-width:0;row-gap:2px}
+.tline>span:last-child,.mytix .tl>span:last-child{white-space:nowrap;flex-shrink:0}
 .mytix .tl{display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--paper);padding:8px 12px;border-left:4px solid var(--ink)}
 .mytix .tl .num{font-size:20px}
 .cheer{text-align:center;padding:22px 16px;background:var(--paper);border-top:5px solid var(--red);box-shadow:0 8px 24px -16px #00000066}
@@ -482,13 +486,14 @@ const MK = {
 const MORDER = ["win","ex","qu","tri","t3"];
 const DEFAULT_SETTINGS = {
   rates:{win:80, ex:75, qu:75, tri:75, t3:70},
-  seed:{ex:50, qu:50, tri:50, t3:50},
-  caps:{win:0, ex:100, qu:100, tri:100, t3:50, self:50},
+  seed:{ex:500, qu:500, tri:500, t3:500},
+  caps:{win:0, ex:1000, qu:1000, tri:1000, t3:500, self:500},
   countdown:60,
   prizes:{prelim:[10,5], g1:[15,10], dobe:[5]},
-  virtual:30,
-  unit:10,
-  yen:10,
+  virtual:300,
+  unit:100,
+  yen:1,
+  chipV:2,
 };
 const POINTS = [4,3,2,1];
 const TYPE_LABEL = {prelim:"予選", g1:"G1 グランプリ", dobe:"D1 ドベ決定戦"};
@@ -499,11 +504,56 @@ const CIRC = ["①","②","③","④"];
 const S = {
   db:null, user:null, uid:null, isOwner:false, ready:false, noDb:false,
   state:null, ledger:null, bets:{}, roster:null, history:null, ps:{},
-  ui:{ m:"win", sel:[], amt:10, order:[], form:{}, proxyMember:"", pm:"win", psel:[], pamt:10, confirm:null, perPerson:null, claimOpen:false },
+  ui:{ m:"win", sel:[], amt:100, order:[], form:{}, proxyMember:"", pm:"win", psel:[], pamt:100, confirm:null, perPerson:null, claimOpen:false },
   prevOdds:{}, flash:{}, closing:false, lastOverlayKey:"",
 };
 function defaultState(){ return {members:[], races:[], cur:-1, settings:clone(DEFAULT_SETTINGS), gameId:rid()}; }
-function settings(){ const s=(S.state&&S.state.settings)||{}; return deepMerge(clone(DEFAULT_SETTINGS), s); }
+function settings(){
+  let s=(S.state&&S.state.settings)||{};
+  // 1枚＝10円・10枚単位のころに保存した設定は、1枚＝1円・100枚単位に合わせて10倍にして読む
+  if(!s.chipV && Object.keys(s).length){
+    s=clone(s); const x10=o=>{ if(o) for(const k in o) if(typeof o[k]==="number") o[k]*=10; };
+    x10(s.seed); x10(s.caps); ["virtual","unit"].forEach(k=>{ if(typeof s[k]==="number") s[k]*=10; }); s.yen=1; s.chipV=2;
+  }
+  const st=deepMerge(clone(DEFAULT_SETTINGS), s);
+  const L=learnedTune(st);
+  ["ex","qu","tri","t3"].forEach(m=>{ if(L.seed[m]!=null) st.seed[m]=L.seed[m]; });
+  if(L.virtual!=null) st.virtual=L.virtual;
+  if(L.caps) Object.assign(st.caps, L.caps);
+  if(L.countdown!=null) st.countdown=L.countdown;
+  st.learned=L.from;
+  return st;
+}
+/* 自動調整：払戻率と賞金％以外は、遊んだ記録から決める。
+   - 見せ金（連系）：直近10レースの売上の中央値の2倍を買い目の数で割る（少なすぎると数枚で倍率が暴落するため）。
+   - 仮の票（単勝）：直近10レースの単勝の売上の中央値の半分を4人で割る。どちらも3レース分たまるまでは初期値。
+   - 1人1レースの上限：今日配ったチップ（1人あたりの中央値）の10%（3連単と走者の自分単勝は5%）。
+   - 締切カウントダウン：直近5レースで「＋30秒」が押された回数と「即締切」の割合から、30〜120秒で調整。 */
+let tuneCache={key:"", val:null};
+function learnedTune(st){
+  const hr=(S.history&&S.history.races)||[], le=(S.ledger&&S.ledger.entries)||[];
+  const key=[hr.length, hr.length?hr[hr.length-1].rid+hr[hr.length-1].t:"", le.length, le.length?le[le.length-1].t:"", S.state&&S.state.gameId, st.unit].join("|");
+  if(tuneCache.key===key) return tuneCache.val;
+  tuneCache={key, val:learnedTuneCalc(st)}; return tuneCache.val;
+}
+function learnedTuneCalc(st){
+  const U=Math.max(1,st.unit||1), rU=x=>Math.max(U,Math.round(x/U)*U), cl=(x,a,b)=>Math.min(b,Math.max(a,x));
+  const med=a=>{ const b=a.slice().sort((x,y)=>x-y); return b[Math.floor(b.length/2)]; };
+  const H=((S.history&&S.history.races)||[]).slice().sort((a,b)=>a.t-b.t), out={seed:{}, from:{}};
+  const P=H.filter(x=>x.pools), NC={ex:12, qu:6, tri:4, t3:24};
+  ["ex","qu","tri","t3"].forEach(m=>{ const xs=P.filter(x=>x.pools[m]!=null).slice(-10).map(x=>x.pools[m]);
+    if(xs.length>=3){ out.seed[m]=cl(rU(med(xs)*2/NC[m]), U*2, U*20); out.from.seed=xs.length; } });
+  const ws=P.filter(x=>x.pools.win!=null).slice(-10).map(x=>x.pools.win);
+  if(ws.length>=3){ out.virtual=cl(Math.round(med(ws)*0.5/4/10)*10, U, U*10); out.from.virtual=ws.length; }
+  const gid=S.state&&S.state.gameId, given={};
+  ((S.ledger&&S.ledger.entries)||[]).filter(e=>e.gameId===gid&&e.amt>0).forEach(e=>given[e.member]=(given[e.member]||0)+e.amt);
+  const gv=Object.values(given);
+  if(gv.length){ const g=med(gv); out.caps={ex:rU(g*0.1), qu:rU(g*0.1), tri:rU(g*0.1), t3:rU(g*0.05), self:rU(g*0.05)}; out.from.caps=g; }
+  const C=H.filter(x=>x.ext!=null).slice(-5);
+  if(C.length>=3){ const ext=C.reduce((a,x)=>a+x.ext,0)/C.length, early=C.filter(x=>x.early).length/C.length;
+    out.countdown=cl(Math.round((60+15*ext-15*early)/5)*5, 30, 120); out.from.countdown=C.length; }
+  return out;
+}
 
 /* ---------------- utils ---------------- */
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
@@ -832,7 +882,9 @@ function kart(i, num){
   </svg>`;
 }
 function badge(r,id){ const i=laneIdx(r,id); return `<span class="lanebadge c${i}">${i+1}</span>`; }
-function selHtml(r,m,sel){ const sep=MK[m].ordered?"→":"・"; return sel.map(id=>badge(r,id)).join(`<span class="muted">${sep}</span>`); }
+function selHtml(r,m,sel,names){ const sep=MK[m].ordered?"→":"・"; return sel.map(id=>names?`<span class="selp">${badge(r,id)}<span class="selnm">${esc(sel.length>1?shortName(mname(id)):mname(id))}</span></span>`:badge(r,id)).join(`<span class="muted">${sep}</span>`); }
+/* 2人以上並べるときの短い名前：スペースがあれば前半（苗字）、なければ4文字以上は先頭2文字 */
+function shortName(n){ n=String(n||"").trim(); const sp=n.split(/[\s　]+/); if(sp.length>1) return sp[0]; return n.length>=4?n.slice(0,2):n; }
 function selText(r,m,sel){ const sep=MK[m].ordered?"→":"・"; return sel.map(id=>CIRC[laneIdx(r,id)]+mname(id)).join(sep); }
 function coin(){ return `<span class="coin"></span>`; }
 function statusPill(r){ const st=r.status==="countdown"&&remain(r)===0?"closed":r.status; return `<span class="pill st-${st}">${st==="open"||st==="countdown"?'<span class="dot"></span>':""}${STATUS_LABEL[st]}</span>`; }
@@ -918,7 +970,7 @@ function helpPlayer(){
     <p>4人が走るマリオカートのレースに、残りの人がスマホからチップを賭けて遊ぶゲームです。アカウント登録やアプリのインストールはいりません。</p>
     <ol class="mlist"><li><b>受付中</b>：スマホから馬券を買う</li><li><b>締切</b>：カウントダウンが終わると締切。大画面にみんなの馬券が公開される</li><li><b>レース</b>：4人が走る</li><li><b>結果発表</b>：当たった人にチップが払い戻される</li></ol>
     <p>予選を何回か行ったあと、上位4人の「G1 グランプリ」と下位4人の「D1 ドベ決定戦」で決勝。最後に表彰式があります。</p>
-    <ul class="mlist"><li>チップは主催者から配られます。</li><li>自分が走る番のレースは、ほかの人に賭けられません。</li></ul>`)}</div>
+    <ul class="mlist"><li>チップは主催者から配られます。1チップ＝1円の感覚で、賭けるのは${unit()}チップ単位です。</li><li>自分が走る番のレースは、ほかの人に賭けられません。</li></ul>`)}</div>
   <div id="m-ready">${mSec("準備","READY",`
     <ol class="mlist"><li>大画面のQRコードを読み取るか、主催者から送られたURLを開く</li><li>「あなたは誰？」で自分の名前をタップする</li><li>名前と残高（持っているチップ）が出たら準備完了</li></ol>
     ${mImg("p_start.jpg","左：名前を選ぶ画面。右：選んだあとの画面。右上の数字が残高")}
@@ -983,9 +1035,9 @@ function helpAdmin(){
     <h3>1. 管理画面を開く</h3>
     <ol class="mlist"><li>管理用URLを開き、暗証番号を入れて「開く」（一度入れた端末は次回から不要）</li><li>テレビにつないだPCで大画面用URLを開き、全画面表示にする</li></ol>
     <h3>2. メンバーを登録する</h3>
-    <ul class="mlist"><li>初めての人：「名前を入力」に名前を入れて「追加」</li><li>2回目から：「いつものメンバー」の名前をタップ。「全員参加」でまとめて追加</li></ul>
+    <ul class="mlist"><li>初めての人：「名前を入力」に名前を入れて「追加」ボタン（Enterキーでは追加されません）</li><li>名前を間違えたら、名前の横の「名前を変更」で直せます</li><li>苗字と名前のあいだにスペースを入れておくと（例：小泉 勝史）、馬券に何人か並ぶときに苗字だけが正しく表示されます</li><li>2回目から：「いつものメンバー」の名前をタップ。「全員参加」でまとめて追加</li></ul>
     <h3>3. チップを配る</h3>
-    <p>各自の行の「枚」に枚数を入れて青い「配る」。全員に同じ枚数を配るのがおすすめです。配りすぎたら「減らす」。</p>
+    <p>各自の行の「枚」に枚数を入れて青い「配る」。1チップ＝1円の感覚で、賭けは${unit()}チップ単位です。全員に同じ枚数を配るのがおすすめです（例：1万チップ）。配りすぎたら「減らす」。</p>
     ${mImg("members.jpg","8人を登録し、各1000枚を配ったところ")}
     <p>参加者がスマホで名前を選ぶと「スマホ接続」と出ます。全員に付いたか確かめてから始めると安心です。</p>
     <h3>4. 出走表を作る</h3>
@@ -1036,8 +1088,8 @@ function helpAdmin(){
     <ol class="mlist"><li>「馬券データCSV」「レース結果CSV」で保存（次回の倍率や払戻率の見直しに使える）</li><li>「ゲームをリセット」→「リセットする」</li></ol>
     ${mImg("data.jpg","CSVの保存とリセット")}
     <ul class="mlist"><li>リセットで消えるのは、今日のメンバー・チップ・出走表・馬券です。</li><li>名簿、これまでの成績、ルール設定は消えません。</li><li>試しに遊んだあとも、リセットしてから本番を始めてください。</li></ul>
-    <h3>ルール設定（必要なときだけ）</h3>
-    <p>「ルール設定」で払戻率・上限・締切の秒数・賭けの単位・賞金の割合・見せ金を変えて「設定を保存」できます。初めてなら、そのままで大丈夫です。</p>`)}</div>
+    <h3>ルール設定（自動で調整されます）</h3>
+    <p>ふだんは触らなくて大丈夫です。管理画面の「ルール設定」を開くと、払戻率と賞金の％だけ手で変えられます。</p><ul class="mlist"><li>見せ金・単勝の仮の票：直近のレースの売上から自動で調整（3レース分たまるまでは初期値）</li><li>1人1レースの上限：今日配ったチップの10%（3連単と走者の自分単勝は5%）</li><li>締切カウントダウン：「＋30秒」をよく押すと長く、「即締切」が多いと短く（30〜120秒）</li><li>賭けの単位は100枚（1枚＝1円）で固定</li></ul>`)}</div>
   </div>`;
 }
 function renderHelp(){
@@ -1193,7 +1245,7 @@ function revealHtml(r){
   const cards=Object.entries(by).map(([m,ts],i)=>{
     const bs=[]; if(m===maxM) bs.push(`<span class="badge b-max">MAX BET</span>`); if(m===anaM && anaV>=10) bs.push(`<span class="badge b-ana">大穴狙い</span>`); if(ts.length===1) bs.push(`<span class="badge b-one">一点勝負</span>`); if(r.runners.includes(m)) bs.push(`<span class="badge b-self">自分に賭けた</span>`);
     return `<div class="tcard" style="animation-delay:${i*.12}s"><h3><span>${esc(mname(m))}</span><span class="row">${bs.join("")}</span></h3>
-      ${ts.map(t=>{ const e=O.odds[t.m][keyOf(t.m,t.sel)]; return `<div class="tline"><span class="row" style="gap:6px"><b>${MK[t.m].label}</b>${selHtml(r,t.m,t.sel)}</span><span><b class="num">${t.amt}</b>枚 <span class="muted num">${e?fmtO(e.v):""}倍</span></span></div>`; }).join("")}</div>`;
+      ${ts.map(t=>{ const e=O.odds[t.m][keyOf(t.m,t.sel)]; return `<div class="tline"><span class="row" style="gap:6px"><b>${MK[t.m].label}</b>${selHtml(r,t.m,t.sel,true)}</span><span><b class="num">${t.amt}</b>枚 <span class="muted num">${e?fmtO(e.v):""}倍</span></span></div>`; }).join("")}</div>`;
   }).join("");
   return `<div class="overlay ov-${r.type}">${r.type==="g1"?confetti(30):""}<div class="inner"><div class="stamp">締切！馬券公開</div>
     <p class="sub2">${esc(raceTitle(r))}　売上 <b class="num" style="color:var(--goldink)">${tix.reduce((a,t)=>a+t.amt,0)}</b> 枚</p>
@@ -1203,7 +1255,7 @@ function resultHtml(r){
   const s=r.settle;
   const pod=[1,0,2,3].filter(i=>s.order[i]).map(i=>{ const id=s.order[i], li=laneIdx(r,id); const h=[150,110,80,50][i];
     return `<div class="pod"><div class="rk r${i+1}">${["1ST","2ND","3RD","4TH"][i]}</div><div class="k">${kart(li,li+1)}</div><div class="nm">${esc(mname(id))}</div>${s.prizes[id]?`<div class="hit">賞金 ${coin()} <span class="num">${s.prizes[id]}</span></div>`:""}<div class="block" style="height:${h}px"></div></div>`; }).join("");
-  const rows=marketsFor(r).map(m=>{ const w=s.winOdds[m]; if(!w) return ""; return `<tr><th>${MK[m].label}</th><td>${selHtml(r,m,w.sel)}</td><td class="num">${w.v?fmtO(w.v)+"倍":'<span class="muted" style="font-size:14px">的中なし</span>'}</td></tr>`; }).join("");
+  const rows=marketsFor(r).map(m=>{ const w=s.winOdds[m]; if(!w) return ""; return `<tr><th>${MK[m].label}</th><td>${selHtml(r,m,w.sel,true)}</td><td class="num">${w.v?fmtO(w.v)+"倍":'<span class="muted" style="font-size:14px">的中なし</span>'}</td></tr>`; }).join("");
   const hits = s.hits.length ? s.hits.sort((a,b)=>b.pay-a.pay).map(h=>`<div class="hit">${esc(mname(h.member))} <span class="muted">${MK[h.m].label}</span> ${coin()} <span class="num">+${h.pay}</span></div>`).join("") : `<span class="muted">的中者なし…！</span>`;
   const last=s.order[s.order.length-1], lli=laneIdx(r,last), champ=s.order[0];
   const head = r.type==="g1" ? `<div class="gp-top">GRAND PRIX WINNER</div><div class="stamp">${esc(mname(champ))} 優勝！</div>`
@@ -1274,9 +1326,9 @@ function renderBet(){
   const can=live&&done&&bal>=amt&&amt<=capLeft&&amt>0;
   const why=!live?"受付していません": !done?`${n===1?"1人":n+"人"}選んでね` : bal<amt?"チップが足りません" : amt>capLeft?`${MK[m].label}は1レース${cap}枚まで`:"";
   const myList=mine.length?`<h2 style="font-size:16px">このレースの馬券</h2><div class="mytix">${mine.map(t=>{ const eo=O.odds[t.m][keyOf(t.m,t.sel)];
-      return `<div class="tl"><span class="row" style="gap:6px"><b>${MK[t.m].label}</b>${selHtml(r,t.m,t.sel)}</span><span class="row" style="gap:8px"><b class="num">${t.amt}</b>枚<span class="muted num">${eo?fmtO(eo.v):""}倍</span>${live&&t.doc===S.uid?`<button class="btn sm" data-act="cancelT" data-id="${t.id}">取消</button>`:""}</span></div>`; }).join("")}</div>`:"";
+      return `<div class="tl"><span class="row" style="gap:6px"><b>${MK[t.m].label}</b>${selHtml(r,t.m,t.sel,true)}</span><span class="row" style="gap:8px"><b class="num">${t.amt}</b>枚<span class="muted num">${eo?fmtO(eo.v):""}倍</span>${live&&t.doc===S.uid?`<button class="btn sm" data-act="cancelT" data-id="${t.id}">取消</button>`:""}</span></div>`; }).join("")}</div>`:"";
   const bar = live ? `<div class="betbar"><div class="in">
-      <div class="row1"><span class="selv">${done?`<b>${MK[m].label}</b> ${selHtml(r,m,sel)}`:`<span class="muted">${MK[m].label}：${why}</span>`}</span><span class="ov">${e?fmtO(e.v)+"倍":""}</span></div>
+      <div class="row1"><span class="selv">${done?`<b>${MK[m].label}</b> ${selHtml(r,m,sel,true)}`:`<span class="muted">${MK[m].label}：${why}</span>`}</span><span class="ov">${e?fmtO(e.v)+"倍":""}</span></div>
       <div class="row2">
         ${amtButtons(amt)}
         <button class="btn go" data-act="bet" ${can?"":"disabled"} style="font-size:18px;padding:12px 18px">賭ける！</button>
@@ -1419,7 +1471,7 @@ function adminMembers(){
     ${!started||S.ui.showJoin?rosterHtml():""}
     ${!started||S.ui.showJoin?`<div class="row" style="margin-bottom:10px"><input id="newName" data-bind="newName" placeholder="名前を入力" value="${esc(S.ui.form.newName||"")}" style="flex:1"><button class="btn go" data-act="addMember">${started?"途中参加":"追加"}</button></div>`:""}
     <div class="scroll"><table class="tbl"><tr><th>名前</th><th class="r">残高</th><th>チップを配る・減らす</th><th></th></tr>
-    ${members().map(m=>`<tr style="${m.left?"opacity:.45":""}"><td><b>${esc(m.name)}</b> ${m.left?'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">離脱</span>':""}${connected.has(m.id)?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">スマホ接続</span>':""}</td><td class="r"><span class="num" style="font-size:18px">${bal[m.id]||0}</span></td>
+    ${members().map(m=>`<tr style="${m.left?"opacity:.45":""}"><td>${S.ui.editName===m.id?`<span class="row" style="gap:4px;flex-wrap:nowrap"><input id="rename_${m.id}" class="mini" style="width:110px" data-bind="rename_${m.id}" value="${esc(S.ui.form["rename_"+m.id]??m.name)}" aria-label="新しい名前"><button class="btn sm go" data-act="renameSave" data-id="${m.id}">保存</button><button class="btn sm ghost" data-act="renameCancel">やめる</button></span>`:`<b>${esc(m.name)}</b> <button class="btn sm ghost" data-act="renameStart" data-id="${m.id}" style="padding:0 4px;font-size:12px;text-decoration:underline">名前を変更</button>`} ${m.left?'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">離脱</span>':""}${connected.has(m.id)?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">スマホ接続</span>':""}</td><td class="r"><span class="num" style="font-size:18px">${bal[m.id]||0}</span></td>
       <td><div class="row" style="gap:4px;flex-wrap:nowrap"><input id="send_${m.id}" class="mini" type="number" min="1" inputmode="numeric" placeholder="枚" data-bind="send_${m.id}" value="${esc(S.ui.form["send_"+m.id]||"")}"><button class="btn sm blue" data-act="send" data-id="${m.id}" data-sign="1">配る</button><button class="btn sm go" data-act="send" data-id="${m.id}" data-sign="-1">減らす</button></div></td>
       <td>${!started?`<button class="btn sm ghost" data-act="delMember" data-id="${m.id}">削除</button>`:m.left?`<button class="btn sm" data-act="rejoin" data-id="${m.id}">復帰</button>`:`<button class="btn sm red" data-act="leave" data-id="${m.id}">離脱</button>`}</td></tr>`).join("")}
     </table></div>
@@ -1443,22 +1495,29 @@ function adminSchedule(){
     <div style="margin-top:12px"><button class="btn go" data-act="makeSchedule">${races().length?"出走表を作り直す":"出走表を作ってスタート"}</button></div></div>`;
 }
 function adminSettings(){
-  const st=settings(), f=S.ui.form;
+  const st=settings(), f=S.ui.form, L=st.learned||{};
   const v=(id,val)=>f[id]!==undefined?f[id]:val;
   const inp=(id,label,val)=>`<label for="${id}">${label}<input id="${id}" type="number" step="any" inputmode="decimal" data-bind="${id}" value="${esc(v(id,val))}"></label>`;
-  return `<div class="panel"><h2>ルール設定 <span class="tag">SETTINGS</span></h2>
+  const tag=k=>L[k]!=null?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">学習中</span>':'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">初期値</span>';
+  return `<div class="panel"><details><summary style="cursor:pointer;font-weight:900;font-style:italic">ルール設定（ふだんは触らなくてOK）</summary>
+    <p class="muted" style="font-size:12px;margin:10px 0">払戻率と賞金の％だけ手で変えられます。そのほかは遊んだ記録から自動で調整します。</p>
     <div class="formgrid">
       ${MORDER.map(m=>inp("rate_"+m,`${MK[m].label} 払戻率%`,st.rates[m])).join("")}
-      ${["ex","qu","tri","t3"].map(m=>inp("seed_"+m,`${MK[m].label} 見せ金/1買い目`,st.seed[m])).join("")}
-      ${["ex","qu","tri","t3"].map(m=>inp("cap_"+m,`${MK[m].label} 上限枚数`,st.caps[m])).join("")}
-      ${inp("cap_self","走者の自分単勝 上限（0で禁止）",st.caps.self)}
-      ${inp("countdown","締切カウントダウン秒",st.countdown)}
-      ${inp("unit","賭けの単位（枚）",st.unit)}
       ${inp("pz_prelim_0","予選 1着賞金%",st.prizes.prelim[0])}${inp("pz_prelim_1","予選 2着賞金%",st.prizes.prelim[1])}
       ${inp("pz_g1_0","G1 1着賞金%",st.prizes.g1[0])}${inp("pz_g1_1","G1 2着賞金%",st.prizes.g1[1])}
       ${inp("pz_dobe_0","ドベ 1着賞金%",st.prizes.dobe[0])}
     </div>
-    <div class="row" style="margin-top:12px"><button class="btn go" data-act="saveSettings">設定を保存</button><span class="muted" style="font-size:12px">単勝で的中者なしは胴元の総取り。見せ金は計算上だけのチップです。</span></div></div>`;
+    <div class="row" style="margin-top:12px"><button class="btn go" data-act="saveSettings">設定を保存</button></div>
+    <h3 style="font-size:14px;margin:16px 0 6px">自動で調整しているもの（いまの値）</h3>
+    <div class="scroll"><table class="tbl"><tr><th>項目</th><th class="r">いまの値</th><th>決め方</th></tr>
+      <tr><td>見せ金（1買い目）${tag("seed")}</td><td class="r">連単${st.seed.ex}・連複${st.seed.qu}・3連複${st.seed.tri}・3連単${st.seed.t3}</td><td class="muted" style="font-size:12px">合計が直近の売上の2倍くらいになるように</td></tr>
+      <tr><td>単勝の仮の票（1人あたり）${tag("virtual")}</td><td class="r">${st.virtual}</td><td class="muted" style="font-size:12px">直近の単勝の売上の半分くらいになるように</td></tr>
+      <tr><td>1人1レースの上限 ${tag("caps")}</td><td class="r">連単・連複・3連複${st.caps.ex}・3連単${st.caps.t3}・走者の自分単勝${st.caps.self}</td><td class="muted" style="font-size:12px">配ったチップの10%（3連単と自分単勝は5%）</td></tr>
+      <tr><td>締切カウントダウン ${tag("countdown")}</td><td class="r">${st.countdown}秒</td><td class="muted" style="font-size:12px">「＋30秒」が多ければ長く、「即締切」が多ければ短く</td></tr>
+      <tr><td>賭けの単位</td><td class="r">${st.unit}枚</td><td class="muted" style="font-size:12px">固定（1枚＝1円）</td></tr>
+    </table></div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">単勝で的中者なしは胴元の総取り。見せ金と仮の票は計算上だけのチップです。</p>
+  </details></div>`;
 }
 function adminUrls(){
   const list=[["投票用（みんなに配る）","#bet","スマホで開いて名前を選ぶだけ。成績表タブもここにあります"],["大画面用（オッズ画面）","#board","テレビやモニターにつないだPCで全画面表示"],["管理用（あなた専用）","#admin","オーナー以外が開いても操作できません"]];
@@ -1517,6 +1576,15 @@ const A={
     if(!p) mutateRoster(r=>{ r.players.push({id, name}); });
     let re=false; mutateState(s=>{ s.members.push({id, name, tb:Math.random()}); re=rescheduleRest(s); }).then(()=>{ if(re) toast(`${name}が途中参加。残りの出走表を組み直しました`); });
     toast(p?`${name}（登録済み）を追加`:`${name}を追加して名簿に保存しました`); },
+  renameStart(d){ S.ui.editName=d.id; S.ui.form["rename_"+d.id]=mname(d.id); render(); },
+  renameCancel(){ if(S.ui.editName) delete S.ui.form["rename_"+S.ui.editName]; S.ui.editName=null; render(); },
+  renameSave(d){ const id=d.id, name=(S.ui.form["rename_"+id]||"").trim(); if(!name){ toast("名前を入れてね"); return; }
+    if(name===mname(id)){ A.renameCancel(); return; }
+    if(members().some(m=>m.id!==id&&m.name===name)||roster().some(p=>p.id!==id&&p.name===name)){ toast("同じ名前がいます"); return; }
+    delete S.ui.form["rename_"+id]; S.ui.editName=null;
+    mutateState(s=>{ const m=s.members.find(x=>x.id===id); if(m) m.name=name; });
+    if(roster().some(p=>p.id===id)) mutateRoster(r=>{ const p=r.players.find(x=>x.id===id); if(p) p.name=name; });
+    toast(`名前を「${name}」に変えました`); },
   addRoster(d){ const p=roster().find(x=>x.id===d.id); if(!p||members().some(m=>m.id===p.id)) return; let re=false; mutateState(s=>{ s.members.push({id:p.id, name:p.name, tb:Math.random()}); re=rescheduleRest(s); }).then(()=>{ if(re) toast(`${p.name}が途中参加。残りの出走表を組み直しました`); }); },
   addAllRoster(){ const add=roster().filter(p=>!members().some(m=>m.id===p.id)); if(!add.length) return; mutateState(s=>{ add.forEach(p=>s.members.push({id:p.id, name:p.name, tb:Math.random()})); rescheduleRest(s); }); toast(`${add.length}人を追加しました`); },
   delRoster(d){ if(S.ui.confirm!=="del:"+d.id){ S.ui.confirm="del:"+d.id; render(); return; } S.ui.confirm=null; mutateRoster(r=>{ r.players=r.players.filter(p=>p.id!==d.id); }); toast("名簿から消しました（成績は残ります）"); },
@@ -1549,8 +1617,8 @@ const A={
     toast("出走表を作りました！第1レース受付開始");
   },
   countdown(){ const sec=settings().countdown; mutateState(s=>{ const r=s.races[s.cur]; r.status="countdown"; r.closeAt=now()+sec*1000; }); },
-  plus30(){ mutateState(s=>{ const r=s.races[s.cur]; if(r.closeAt) r.closeAt+=30000; }); },
-  closeNow(){ S.ui.order=[]; mutateState(s=>{ const r=s.races[s.cur]; r.status="closed"; r.closeAt=Math.min(r.closeAt||Infinity, now()); }); },
+  plus30(){ mutateState(s=>{ const r=s.races[s.cur]; if(r.closeAt){ r.closeAt+=30000; r.ext=(r.ext||0)+1; } }); },
+  closeNow(){ S.ui.order=[]; mutateState(s=>{ const r=s.races[s.cur]; if(r.status==="countdown"&&r.closeAt&&now()<r.closeAt-5000) r.early=1; r.status="closed"; r.closeAt=Math.min(r.closeAt||Infinity, now()); }); },
   reopen(){ mutateState(s=>{ const r=s.races[s.cur]; r.status="open"; r.closeAt=null; }); },
   orderPick(d){ const o=S.ui.order, i=o.indexOf(d.id); if(i>=0) o.splice(i,1); else o.push(d.id); render(); },
   orderReset(){ S.ui.order=[]; render(); },
@@ -1563,9 +1631,10 @@ const A={
     const pl={}; raceTickets(rr).forEach(t=>pl[t.member]=(pl[t.member]||0)-t.amt);
     for(const [m,a] of Object.entries(settle.payouts)) pl[m]=(pl[m]||0)+a;
     for(const [m,a] of Object.entries(settle.prizes)) pl[m]=(pl[m]||0)+a;
-    const gid=S.state.gameId, rid0=r.id, typ=r.type;
+    const gid=S.state.gameId, rid0=r.id, typ=r.type, pools={};
+    marketsFor(rr).forEach(m=>pools[m]=0); raceTickets(rr).forEach(t=>{ if(pools[t.m]!=null) pools[t.m]+=t.amt; });
     mutateState(s=>{ const x=s.races[s.cur]; x.order=o; x.settle=settle; x.status="done"; if(!x.closeAt) x.closeAt=now(); });
-    mutateHistory(hh=>{ hh.races=hh.races.filter(x=>x.rid!==rid0); hh.races.push({rid:rid0, gid, t:now(), type:typ, order:o, pl}); });
+    mutateHistory(hh=>{ hh.races=hh.races.filter(x=>x.rid!==rid0); hh.races.push({rid:rid0, gid, t:now(), type:typ, order:o, pl, pools, ext:r.ext||0, early:r.early?1:0}); });
   },
   undoResult(){ const r=curRace(); const rid0=r&&r.id; mutateState(s=>{ const x=s.races[s.cur]; x.settle=null; x.order=null; x.status="closed"; }); if(rid0) mutateHistory(hh=>{ hh.races=hh.races.filter(x=>x.rid!==rid0); }); },
   nextRace(){ mutateState(s=>{ s.cur++; const r=s.races[s.cur]; r.status="open"; r.closeAt=null; }); },
@@ -1592,16 +1661,13 @@ const A={
     S.ui.psel=[]; toast(`${mname(pm)}：${MK[m].label} ${amt}枚`);
   },
   saveSettings(){
-    const f=S.ui.form, st=settings(), num=(id,d)=>{ const x=parseFloat(f[id]); return isFinite(x)?x:d; };
-    MORDER.forEach(m=>st.rates[m]=num("rate_"+m,st.rates[m]));
-    ["ex","qu","tri","t3"].forEach(m=>{ st.seed[m]=Math.max(0,num("seed_"+m,st.seed[m])); st.caps[m]=Math.max(0,Math.round(num("cap_"+m,st.caps[m]))); });
-    st.caps.self=Math.max(0,Math.round(num("cap_self",st.caps.self)));
-    st.unit=Math.max(1,Math.round(num("unit",st.unit)));
-    st.countdown=Math.max(5,Math.round(num("countdown",st.countdown)));
+    const f=S.ui.form, st=clone(settings()), num=(id,d)=>{ const x=parseFloat(f[id]); return isFinite(x)?x:d; };
+    delete st.learned;
+    MORDER.forEach(m=>st.rates[m]=Math.min(100,Math.max(0,num("rate_"+m,st.rates[m]))));
     st.prizes.prelim=[num("pz_prelim_0",st.prizes.prelim[0]),num("pz_prelim_1",st.prizes.prelim[1])];
     st.prizes.g1=[num("pz_g1_0",st.prizes.g1[0]),num("pz_g1_1",st.prizes.g1[1])];
     st.prizes.dobe=[num("pz_dobe_0",st.prizes.dobe[0])];
-    Object.keys(f).filter(k=>/^(rate_|seed_|cap_|pz_|countdown|unit|yen)/.test(k)).forEach(k=>delete f[k]);
+    Object.keys(f).filter(k=>/^(rate_|pz_)/.test(k)).forEach(k=>delete f[k]);
     mutateState(s=>{ s.settings=st; }); toast("設定を保存しました");
   },
   askReset(){ S.ui.confirm="reset"; render(); },
@@ -1645,7 +1711,7 @@ document.addEventListener("input",e=>{
   if(b==="proxyMember") render();
 });
 document.addEventListener("change",e=>{ if(e.target.dataset&&e.target.dataset.bind==="proxyMember"){ S.ui.proxyMember=e.target.value; render(); } });
-document.addEventListener("keydown",e=>{ if(e.key==="Enter"&&e.target.id==="newName") A.addMember(); if(e.key==="Enter"&&e.target.id==="adminPin") A.pin(); });
+document.addEventListener("keydown",e=>{ if(e.isComposing||e.keyCode===229) return; if(e.key==="Enter"&&e.target.id==="adminPin") A.pin(); });
 window.addEventListener("hashchange",()=>{ S.lastOverlayKey=""; render(); });
 
 /* ticker: countdown digits, auto-close on admin, overlay countdown */

@@ -278,7 +278,7 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .betbar .btn.sm{background:#2c2c33;color:#fff;box-shadow:none}
 .amt{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .amt .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:36px;min-width:1.8em;text-align:center;line-height:1}
-.amtin{width:2.5em;font-size:32px!important;background:transparent;color:inherit;border:0;border-bottom:2px dashed currentColor;padding:0 2px;-moz-appearance:textfield;appearance:textfield}
+.amtin{width:2.5em;font-size:32px!important;background:transparent;color:inherit;border:0;padding:0 2px;-moz-appearance:textfield;appearance:textfield}
 .amtin::-webkit-outer-spin-button,.amtin::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .amtin:focus{outline:2px solid var(--yellow);outline-offset:2px}
 .betbar .num[style]{color:var(--yellow)!important}
@@ -1464,9 +1464,9 @@ function renderBet(){
   return `<div class="bet">${head}${topTabs}${finalCard(me)}${nextUp}${banner}${closedMsg}
     ${live?"":myTicketsClosed(r,me,O,mine)}
     <div class="rcards">${cards}</div>
-    ${live?marksPanel(r,me):""}
     ${live?`<div class="tabs">${tabs}</div><p class="hint">${MK[m].ordered&&n>1?"1着から順番にタップ":"タップで選択"}（もう一度タップで解除）</p>`:""}
     ${live&&n>1?phoneOddsList(r,O,m,sel):""}
+    ${live?marksPanel(r,me):""}
     ${live?myList:""}${bar}</div>`;
 }
 /* スマホ：連単・連複などを選んだとき、全部の組み合わせの倍率を一覧に（押すとその組み合わせを選ぶ） */

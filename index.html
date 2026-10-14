@@ -260,6 +260,9 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .amt .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:36px;min-width:1.8em;text-align:center;line-height:1}
 .betbar .num[style]{color:var(--yellow)!important}
 .mytix{display:grid;gap:4px}
+.tbl .btn{white-space:nowrap}
+.nameedit{font:inherit;font-weight:900;color:inherit;background:none;border:0;border-bottom:1px dashed #0000004d;padding:2px 0;cursor:pointer;text-align:left}
+.nameedit:hover{color:var(--red);border-bottom-color:var(--red)}
 .selp{display:inline-flex;align-items:center;white-space:nowrap}
 .selnm{font-weight:800;margin:0 2px 0 4px;white-space:nowrap}
 .tline>span:first-child,.mytix .tl>span:first-child{flex-wrap:wrap;min-width:0;row-gap:2px}
@@ -1035,7 +1038,7 @@ function helpAdmin(){
     <h3>1. 管理画面を開く</h3>
     <ol class="mlist"><li>管理用URLを開き、暗証番号を入れて「開く」（一度入れた端末は次回から不要）</li><li>テレビにつないだPCで大画面用URLを開き、全画面表示にする</li></ol>
     <h3>2. メンバーを登録する</h3>
-    <ul class="mlist"><li>初めての人：「名前を入力」に名前を入れて「追加」ボタン（Enterキーでは追加されません）</li><li>名前を間違えたら、名前の横の「名前を変更」で直せます</li><li>苗字と名前のあいだにスペースを入れておくと（例：小泉 勝史）、馬券に何人か並ぶときに苗字だけが正しく表示されます</li><li>2回目から：「いつものメンバー」の名前をタップ。「全員参加」でまとめて追加</li></ul>
+    <ul class="mlist"><li>初めての人：「名前を入力」に名前を入れて「追加」ボタン（Enterキーでは追加されません）</li><li>名前を間違えたら、メンバー一覧の名前を押すとその場で直せます（Enterか「保存」で決定）</li><li>苗字と名前のあいだにスペースを入れておくと（例：小泉 勝史）、馬券に何人か並ぶときに苗字だけが正しく表示されます</li><li>2回目から：「いつものメンバー」の名前をタップ。「全員参加」でまとめて追加</li></ul>
     <h3>3. チップを配る</h3>
     <p>各自の行の「枚」に枚数を入れて青い「配る」。1チップ＝1円の感覚で、賭けは${unit()}チップ単位です。全員に同じ枚数を配るのがおすすめです（例：1万チップ）。配りすぎたら「減らす」。</p>
     ${mImg("members.jpg","8人を登録し、各1000枚を配ったところ")}
@@ -1471,7 +1474,7 @@ function adminMembers(){
     ${!started||S.ui.showJoin?rosterHtml():""}
     ${!started||S.ui.showJoin?`<div class="row" style="margin-bottom:10px"><input id="newName" data-bind="newName" placeholder="名前を入力" value="${esc(S.ui.form.newName||"")}" style="flex:1"><button class="btn go" data-act="addMember">${started?"途中参加":"追加"}</button></div>`:""}
     <div class="scroll"><table class="tbl"><tr><th>名前</th><th class="r">残高</th><th>チップを配る・減らす</th><th></th></tr>
-    ${members().map(m=>`<tr style="${m.left?"opacity:.45":""}"><td>${S.ui.editName===m.id?`<span class="row" style="gap:4px;flex-wrap:nowrap"><input id="rename_${m.id}" class="mini" style="width:110px" data-bind="rename_${m.id}" value="${esc(S.ui.form["rename_"+m.id]??m.name)}" aria-label="新しい名前"><button class="btn sm go" data-act="renameSave" data-id="${m.id}">保存</button><button class="btn sm ghost" data-act="renameCancel">やめる</button></span>`:`<b>${esc(m.name)}</b> <button class="btn sm ghost" data-act="renameStart" data-id="${m.id}" style="padding:0 4px;font-size:12px;text-decoration:underline">名前を変更</button>`} ${m.left?'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">離脱</span>':""}${connected.has(m.id)?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">スマホ接続</span>':""}</td><td class="r"><span class="num" style="font-size:18px">${bal[m.id]||0}</span></td>
+    ${members().map(m=>`<tr style="${m.left?"opacity:.45":""}"><td>${S.ui.editName===m.id?`<span class="row" style="gap:4px"><input id="rename_${m.id}" class="mini" style="width:100%;min-width:90px" data-bind="rename_${m.id}" value="${esc(S.ui.form["rename_"+m.id]??m.name)}" aria-label="新しい名前"><button class="btn sm go" data-act="renameSave" data-id="${m.id}">保存</button><button class="btn sm ghost" data-act="renameCancel">やめる</button></span>`:`<button class="nameedit" data-act="renameStart" data-id="${m.id}" title="押すと名前を直せます">${esc(m.name)}</button>`} ${m.left?'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">離脱</span>':""}${connected.has(m.id)?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">スマホ接続</span>':""}</td><td class="r"><span class="num" style="font-size:18px">${bal[m.id]||0}</span></td>
       <td><div class="row" style="gap:4px;flex-wrap:nowrap"><input id="send_${m.id}" class="mini" type="number" min="1" inputmode="numeric" placeholder="枚" data-bind="send_${m.id}" value="${esc(S.ui.form["send_"+m.id]||"")}"><button class="btn sm blue" data-act="send" data-id="${m.id}" data-sign="1">配る</button><button class="btn sm go" data-act="send" data-id="${m.id}" data-sign="-1">減らす</button></div></td>
       <td>${!started?`<button class="btn sm ghost" data-act="delMember" data-id="${m.id}">削除</button>`:m.left?`<button class="btn sm" data-act="rejoin" data-id="${m.id}">復帰</button>`:`<button class="btn sm red" data-act="leave" data-id="${m.id}">離脱</button>`}</td></tr>`).join("")}
     </table></div>
@@ -1576,7 +1579,7 @@ const A={
     if(!p) mutateRoster(r=>{ r.players.push({id, name}); });
     let re=false; mutateState(s=>{ s.members.push({id, name, tb:Math.random()}); re=rescheduleRest(s); }).then(()=>{ if(re) toast(`${name}が途中参加。残りの出走表を組み直しました`); });
     toast(p?`${name}（登録済み）を追加`:`${name}を追加して名簿に保存しました`); },
-  renameStart(d){ S.ui.editName=d.id; S.ui.form["rename_"+d.id]=mname(d.id); render(); },
+  renameStart(d){ S.ui.editName=d.id; S.ui.form["rename_"+d.id]=mname(d.id); render(); const el=document.getElementById("rename_"+d.id); if(el){ el.focus(); el.select(); } },
   renameCancel(){ if(S.ui.editName) delete S.ui.form["rename_"+S.ui.editName]; S.ui.editName=null; render(); },
   renameSave(d){ const id=d.id, name=(S.ui.form["rename_"+id]||"").trim(); if(!name){ toast("名前を入れてね"); return; }
     if(name===mname(id)){ A.renameCancel(); return; }
@@ -1711,7 +1714,7 @@ document.addEventListener("input",e=>{
   if(b==="proxyMember") render();
 });
 document.addEventListener("change",e=>{ if(e.target.dataset&&e.target.dataset.bind==="proxyMember"){ S.ui.proxyMember=e.target.value; render(); } });
-document.addEventListener("keydown",e=>{ if(e.isComposing||e.keyCode===229) return; if(e.key==="Enter"&&e.target.id==="adminPin") A.pin(); });
+document.addEventListener("keydown",e=>{ if(e.isComposing||e.keyCode===229) return; if(e.key==="Enter"&&e.target.id==="adminPin") A.pin(); if(e.target.id&&e.target.id.startsWith("rename_")){ if(e.key==="Enter") A.renameSave({id:e.target.id.slice(7)}); else if(e.key==="Escape") A.renameCancel(); } });
 window.addEventListener("hashchange",()=>{ S.lastOverlayKey=""; render(); });
 
 /* ticker: countdown digits, auto-close on admin, overlay countdown */

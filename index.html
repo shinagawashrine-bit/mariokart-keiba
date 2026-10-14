@@ -187,6 +187,15 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .stamp{font-family:var(--f-display);font-weight:900;font-style:italic;font-size:clamp(48px,8.5vw,132px);line-height:1;text-align:center;color:#fff;text-shadow:6px 6px 0 var(--ink);letter-spacing:.02em;animation:slam .45s cubic-bezier(.2,1.5,.4,1)}
 @keyframes slam{from{transform:translateX(-30%) skewX(-20deg);opacity:0}to{transform:none;opacity:1}}
 .bigcount{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:min(46vw,420px);line-height:1;color:#fff;text-shadow:14px 14px 0 var(--red);animation:slam .3s cubic-bezier(.2,1.5,.4,1)}
+.poprow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.popc{background:var(--paper);border-top:6px solid var(--lc);padding:8px 14px 10px;display:grid;gap:2px;box-shadow:0 10px 30px -14px #000a;animation:pop .4s backwards}
+.popc .pk{font-weight:900;font-style:italic;font-size:15px;color:var(--muted)}
+.popc:first-child .pk{color:var(--red)}
+.popc .pn{display:flex;align-items:center;gap:8px;font-size:22px;min-width:0}
+.popc .pn b{font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:.25em;min-width:0}
+.popc .po{text-align:right;font-weight:800;font-style:italic}
+.popc .po .num{font-family:var(--f-num);font-size:44px;line-height:1}
+@media (max-width:700px){.poprow{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .tickets{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
 .tcard{background:var(--paper);padding:0 14px 10px;animation:pop .4s backwards;box-shadow:0 10px 30px -14px #000a}
 @keyframes pop{from{transform:translateX(-24px);opacity:0}}
@@ -1037,7 +1046,7 @@ function helpPlayer(){
   <div id="m-result">${mSec("大画面・結果・成績","RESULTS",`
     <p>締切から結果発表までは、大画面をみんなで見ます。払い戻しは自動で残高に入ります。</p>
     ${mImg("b_open.jpg","受付中の大画面。左に単勝オッズ、右に連単・連複・3連複のオッズ")}
-    ${mImg("b_closed.jpg","締切のあと。誰がどの馬券を何枚買ったかが公開される")}
+    ${mImg("b_closed.jpg","締切のあと。誰がどの馬券を何枚買ったかが公開される")}<p>締切のあとの大画面には、上に「1番人気 〇〇 2.0倍」のように、4人の人気順と単勝の倍率も並びます。</p>
     ${mImg("b_result.jpg","結果発表。表彰台、払戻の倍率、当てた人")}
     ${mImg("p_result.jpg","左：締切後のスマホ。右：当たると「的中！」画面（タップで閉じる）")}<p>締切のあとは、「締切！」のすぐ下に「あなたの馬券」が出ます。買った馬券ごとに、枚数×倍率と「当たれば〇枚」がわかります。結果が出ると「的中 +〇〇」か「はずれ」に変わります。</p><p>外れたときは「LOSE」画面が出て、そのレースで賭けた枚数が表示されます。馬券を買っていないレースでは何も出ません。</p>
     ${mImg("p_final.jpg","左：本日の最終ポイント。右：成績表タブ")}
@@ -1061,7 +1070,7 @@ function helpAdmin(){
     <p>主催者は「管理画面」（自分のPC）と「大画面」（テレビにつないだPC）の2つを開いて進行します。参加者には投票用のURLだけを配ります。</p>
     <div class="scroll"><table class="tbl mtbl"><tr><th>画面</th><th>使う端末</th><th>URL</th></tr>
     <tr><td>管理画面</td><td>主催者のPC</td><td><code>${BASE_URL}#admin</code></td></tr>
-    <tr><td>大画面（オッズ画面）</td><td>テレビ・モニター（全画面表示）</td><td><code>${BASE_URL}#board</code></td></tr>
+    <tr><td>大画面（オッズ画面）</td><td>テレビ・モニター・iPad（全画面表示。画面の大きさに合わせて自動で縮小し、スクロールなしで収まります）</td><td><code>${BASE_URL}#board</code></td></tr>
     <tr><td>投票画面</td><td>参加者のスマホ</td><td><code>${BASE_URL}#bet</code></td></tr>
     <tr><td>成績表</td><td>誰でも</td><td><code>${BASE_URL}#stats</code></td></tr></table></div>
     ${mImg("urls.jpg","管理画面のURL欄。「コピー」でLINEなどに貼り付けて配れる")}
@@ -1157,7 +1166,7 @@ function render(){
   document.body.dataset.race = (md==="board"||md==="bet")&&cr ? cr.type : "";
   if(aid){ const el=document.getElementById(aid); if(el){ el.focus(); try{ if(selS!=null) el.setSelectionRange(selS,selS); }catch(e){} } }
   renderOverlay();
-  if(md==="board") drawQR();
+  if(md==="board"){ drawQR(); fitBoard(); }
 }
 function renderPicker(){
   return `<div class="picker"><div style="width:100%;display:grid;justify-items:center">
@@ -1236,6 +1245,18 @@ function drawQR(){
   el.innerHTML=""; try{ new QRCode(el,{text:BET_URL,width:116,height:116,correctLevel:QRCode.CorrectLevel.M}); }catch(e){}
 }
 
+/* 大画面はスクロールなしで1画面に収める：はみ出す分だけ全体を縮小（iPad 11インチ・外部モニター想定） */
+function fitBoard(){
+  if(mode()!=="board") return;
+  const shrink=(el, over)=>{ if(!el) return; el.style.zoom=""; let z=1;
+    for(let k=0;k<4;k++){ const o=over(); if(o<=1) break; z=Math.max(.35, z/o*0.98); el.style.zoom=z; } };
+  const b=document.querySelector("#app .board");
+  shrink(b, ()=>document.documentElement.scrollHeight/window.innerHeight);
+  const ov=document.querySelector("#ov .overlay"), inner=ov&&ov.querySelector(".inner");
+  if(inner) shrink(inner, ()=>{ const cs=getComputedStyle(ov), avail=ov.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom); return inner.getBoundingClientRect().height/avail; });
+}
+window.addEventListener("resize",()=>fitBoard());
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>fitBoard());
 /* overlays on board: countdown last 5s, reveal (closed), result (done) */
 function renderOverlay(){
   const ov=document.getElementById("ov");
@@ -1251,7 +1272,7 @@ function renderOverlay(){
   else if(closed){ key="rv"+r.id+raceTickets(r).length; html=revealHtml(r); }
   else if(r.status==="done" && r.settle){ key="rs"+r.id+r.settle.at; html=resultHtml(r); }
   else if(S.intro && S.intro.id===r.id && now()<S.intro.until && isLive(r)){ key="in"+r.id; html=introHtml(r); }
-  if(key!==S.lastOverlayKey){ ov.innerHTML=html; S.lastOverlayKey=key; }
+  if(key!==S.lastOverlayKey){ ov.innerHTML=html; S.lastOverlayKey=key; fitBoard(); }
 }
 function confetti(n){
   const cols=["#ffd84a","#fff","#e10600","#18181d","#ffb000","#fff6c9"]; let s="";
@@ -1278,7 +1299,14 @@ function revealHtml(r){
   }).join("");
   return `<div class="overlay ov-${r.type}">${r.type==="g1"?confetti(30):""}<div class="inner"><div class="stamp">締切！馬券公開</div>
     <p class="sub2">${esc(raceTitle(r))}　合計 <b class="num" style="color:var(--goldink)">${tix.reduce((a,t)=>a+t.amt,0)}</b> 枚</p>
+    ${popRowHtml(r,O)}
     ${cards?`<div class="tickets">${cards}</div>`:`<p style="text-align:center">馬券なし</p>`}</div></div>`;
+}
+/* 締切後の人気順（単勝の倍率が低い順） */
+function popRowHtml(r,O){
+  const rank=popularity(r,O), ids=r.runners.slice().sort((a,b)=>rank[a]-rank[b]);
+  return `<div class="poprow">${ids.map(id=>{ const i=laneIdx(r,id), o=O.odds.win[id];
+    return `<div class="popc c${i}"><div class="pk">${rank[id]}番人気</div><div class="pn"><span class="lanebadge c${i}">${i+1}</span><b>${esc(mname(id))}</b></div><div class="po"><span class="num">${fmtO(o.v)}</span>倍</div></div>`; }).join("")}</div>`;
 }
 function resultHtml(r){
   const s=r.settle;

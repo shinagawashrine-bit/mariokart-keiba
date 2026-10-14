@@ -159,6 +159,11 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .mx td.x{background:repeating-linear-gradient(-60deg,#e3e2dc 0 4px,transparent 4px 9px)}
 .mx td.hot{background:#fff2c2;box-shadow:inset 0 -3px 0 var(--yellow)}
 .olist{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px}
+.olist.m-qu{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.olist.m-tri.n3{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.olist.m-qu .oitem,.olist.m-tri .oitem{padding:8px 14px 8px 10px}
+.olist.m-qu .oitem .sel .lanebadge,.olist.m-tri .oitem .sel .lanebadge{font-size:17px}
+.olist.m-qu .oitem .v,.olist.m-tri .oitem .v{font-size:clamp(24px,2.4vw,36px)}
 .olist.n3{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
 .oitem .v{white-space:nowrap}
 .oitem{min-width:0;display:flex;align-items:center;justify-content:space-between;gap:6px;background:var(--paper2);padding:6px 12px 6px 8px;border-left:3px solid var(--ink)}
@@ -1250,7 +1255,7 @@ function renderBoard(){
   const exM = `<div class="panel"><h2>連単 <span class="tag">EXACTA · 1着↓ 2着→</span></h2><div class="scroll"><table class="mx"><tr><th></th>${r.runners.map((id,j)=>`<th>${badge(r,id)}</th>`).join("")}</tr>
     ${r.runners.map(a=>`<tr><th>${badge(r,a)}</th>${r.runners.map(b=>{ if(a===b) return `<td class="x"></td>`; const k=keyOf("ex",[a,b]), e=O.odds.ex[k]; return `<td class="${fc("ex",k)} ${e.pop?"hot":""}">${fmtO(e.v)}</td>`; }).join("")}</tr>`).join("")}</table></div></div>`;
   const listM=(m,top)=>{ const arr=Object.entries(O.odds[m]).sort((a,b)=>a[1].v-b[1].v).slice(0,top||99);
-    return `<div class="panel"><h2>${MK[m].label} <span class="tag">${MK[m].help}</span></h2><div class="olist ${MK[m].n===3?"n3":""}">${arr.map(([k,e])=>`<div class="oitem"><span class="sel">${selHtml(r,m,e.sel,false,true)}</span><span class="v ${fc(m,k)}">${fmtO(e.v)}</span></div>`).join("")}</div></div>`; };
+    return `<div class="panel"><h2>${MK[m].label} <span class="tag">${MK[m].help}</span></h2><div class="olist m-${m} ${MK[m].n===3?"n3":""}">${arr.map(([k,e])=>`<div class="oitem"><span class="sel">${selHtml(r,m,e.sel,false,true)}</span><span class="v ${fc(m,k)}">${fmtO(e.v)}</span></div>`).join("")}</div></div>`; };
   const sales=ms.map(m=>`<div><small>${MK[m].label}</small><span class="num">${O.pools[m].total}</span></div>`).join("");
   const total=ms.reduce((a,m)=>a+O.pools[m].total,0);
   const timer = r.status==="countdown" ? `<div class="timer ${rem<=10?"hot":""}" data-cd="${r.id}">${mmss(rem)}</div>` : statusPill(r);

@@ -260,6 +260,16 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .amt .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:36px;min-width:1.8em;text-align:center;line-height:1}
 .betbar .num[style]{color:var(--yellow)!important}
 .mytix{display:grid;gap:4px}
+.mybox{background:var(--paper);padding:12px;display:grid;gap:8px;border-top:4px solid var(--red);margin:10px 0}
+.mybox h2{font-size:18px;font-style:italic;margin:0;display:flex;justify-content:space-between;align-items:baseline}
+.myt{display:grid;gap:4px;padding:8px 10px;background:#f4f4f2;border-left:4px solid var(--ink)}
+.myt.won{border-left-color:var(--green);background:#eafaf1}
+.myt.miss{opacity:.7}
+.myt1{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:15px}
+.myt2{display:flex;justify-content:space-between;align-items:baseline;gap:8px;white-space:nowrap}
+.myt2 .num{font-size:20px}
+.myt2 .odd{color:var(--goldink);font-size:24px}
+.hitp{color:var(--green);font-size:18px}
 .mystats{display:grid;gap:10px}
 .msh{font-size:18px;font-style:italic;margin:10px 0 0;display:flex;align-items:center}
 .mrace{background:var(--paper);padding:10px 12px;display:grid;gap:6px;border-top:3px solid var(--ink)}
@@ -528,7 +538,8 @@ const S = {
   prevOdds:{}, flash:{}, closing:false, lastOverlayKey:"",
 };
 function defaultState(){ return {members:[], races:[], cur:-1, settings:clone(DEFAULT_SETTINGS), gameId:rid()}; }
-function settings(){
+/* exRid：そのレース自身の結果を除いて計算する（確定後も締切時と同じ倍率を出すため） */
+function settings(exRid){
   let s=(S.state&&S.state.settings)||{};
   // 1枚＝10円・10枚単位のころに保存した設定は、1枚＝1円・100枚単位に合わせて10倍にして読む
   if(!s.chipV && Object.keys(s).length){
@@ -536,7 +547,7 @@ function settings(){
     x10(s.seed); x10(s.caps); ["virtual","unit"].forEach(k=>{ if(typeof s[k]==="number") s[k]*=10; }); s.yen=1; s.chipV=2;
   }
   const st=deepMerge(clone(DEFAULT_SETTINGS), s);
-  const L=learnedTune(st);
+  const L=learnedTune(st, exRid);
   ["ex","qu","tri","t3"].forEach(m=>{ if(L.seed[m]!=null) st.seed[m]=L.seed[m]; });
   if(L.virtual!=null) st.virtual=L.virtual;
   if(L.caps) Object.assign(st.caps, L.caps);
@@ -549,17 +560,18 @@ function settings(){
    - 仮の票（単勝）：直近10レースの単勝の売上の中央値の半分を4人で割る。どちらも3レース分たまるまでは初期値。
    - 1人1レースの上限：今日配ったチップ（1人あたりの中央値）の10%（3連単と走者の自分単勝は5%）。
    - 締切カウントダウン：直近5レースで「＋30秒」が押された回数と「即締切」の割合から、30〜120秒で調整。 */
-let tuneCache={key:"", val:null};
-function learnedTune(st){
+let tuneCache={};
+function learnedTune(st, exRid){
   const hr=(S.history&&S.history.races)||[], le=(S.ledger&&S.ledger.entries)||[];
-  const key=[hr.length, hr.length?hr[hr.length-1].rid+hr[hr.length-1].t:"", le.length, le.length?le[le.length-1].t:"", S.state&&S.state.gameId, st.unit].join("|");
-  if(tuneCache.key===key) return tuneCache.val;
-  tuneCache={key, val:learnedTuneCalc(st)}; return tuneCache.val;
+  const key=[hr.length, hr.length?hr[hr.length-1].rid+hr[hr.length-1].t:"", le.length, le.length?le[le.length-1].t:"", S.state&&S.state.gameId, st.unit, exRid||""].join("|");
+  if(tuneCache[key]) return tuneCache[key];
+  if(Object.keys(tuneCache).length>20) tuneCache={};
+  return tuneCache[key]=learnedTuneCalc(st, exRid);
 }
-function learnedTuneCalc(st){
+function learnedTuneCalc(st, exRid){
   const U=Math.max(1,st.unit||1), rU=x=>Math.max(U,Math.round(x/U)*U), cl=(x,a,b)=>Math.min(b,Math.max(a,x));
   const med=a=>{ const b=a.slice().sort((x,y)=>x-y); return b[Math.floor(b.length/2)]; };
-  const H=((S.history&&S.history.races)||[]).slice().sort((a,b)=>a.t-b.t), out={seed:{}, from:{}};
+  const H=((S.history&&S.history.races)||[]).filter(x=>x.rid!==exRid).slice().sort((a,b)=>a.t-b.t), out={seed:{}, from:{}};
   const P=H.filter(x=>x.pools), NC={ex:12, qu:6, tri:4, t3:24};
   ["ex","qu","tri","t3"].forEach(m=>{ const xs=P.filter(x=>x.pools[m]!=null).slice(-10).map(x=>x.pools[m]);
     if(xs.length>=3){ out.seed[m]=cl(rU(med(xs)*2/NC[m]), U*2, U*20); out.from.seed=xs.length; } });
@@ -595,9 +607,9 @@ function raceTitle(r){ return r.type==="prelim" ? `第${r.no}R 予選` : TYPE_LA
 function laneIdx(r,id){ return r.runners.indexOf(id); }
 function roster(){ return (S.roster&&S.roster.players)||[]; }
 function pname(id){ const m=mem(id); if(m) return m.name; const p=roster().find(x=>x.id===id); return p?p.name:"?"; }
-function pstats(gid){
+function pstats(gid, exRid){
   const st={}, get=id=>st[id]||(st[id]={id,runs:0,ranks:[0,0,0,0],g1:0,d1:0,pl:0,recent:[]});
-  ((S.history&&S.history.races)||[]).filter(x=>!gid||x.gid===gid).slice().sort((a,b)=>a.t-b.t).forEach(x=>{
+  ((S.history&&S.history.races)||[]).filter(x=>(!gid||x.gid===gid)&&(!exRid||x.rid!==exRid)).slice().sort((a,b)=>a.t-b.t).forEach(x=>{
     x.order.forEach((id,i)=>{ const s=get(id); s.runs++; s.ranks[i]++; s.recent.push(i+1); if(x.type==="g1"&&i===0) s.g1++; if(x.type==="dobe"&&i===x.order.length-1) s.d1++; });
     for(const [id,v] of Object.entries(x.pl||{})) get(id).pl+=v;
   });
@@ -722,8 +734,8 @@ function balances(){
 /* ---------------- odds engine ---------------- */
 /* 仮の票の配り方：通算の着順ポイント（1着4〜4着1点）が高い人ほど多く。
    出走が少ない人は平均（2.5点）に寄せ、初出走は平均扱い。仮の票の合計は変えない。 */
-function formWeights(R){
-  const ps=S.ps||pstats(), K=3, w={};
+function formWeights(R, exRid){
+  const ps=exRid&&((S.history&&S.history.races)||[]).some(x=>x.rid===exRid) ? pstats(null, exRid) : (S.ps||pstats()), K=3, w={};
   R.forEach(id=>{ const s=ps[id]; let pts=0, n=0;
     if(s) s.ranks.forEach((c,i)=>{ pts+=c*(4-i); n+=c; });
     w[id]=Math.exp((pts+2.5*K)/(n+K)-2.5); });
@@ -732,10 +744,10 @@ function formWeights(R){
   return w;
 }
 function computeOdds(r, tix){
-  const st=settings(), R=r.runners, ms=marketsFor(r), pools={};
+  const st=settings(r.id), R=r.runners, ms=marketsFor(r), pools={};
   ms.forEach(m=>pools[m]={total:0, by:{}});
   tix.forEach(t=>{ if(!pools[t.m]) return; const k=keyOf(t.m,t.sel); pools[t.m].total+=t.amt; pools[t.m].by[k]=(pools[t.m].by[k]||0)+t.amt; });
-  const v=st.virtual, W=pools.win.total, p={}, fw=formWeights(R);
+  const v=st.virtual, W=pools.win.total, p={}, fw=formWeights(R, r.id);
   R.forEach(id=>p[id]=((pools.win.by[id]||0)+v*fw[id])/(W+R.length*v));
   const odds={win:{}};
   R.forEach(id=>{ const b=pools.win.by[id]||0; const rate=st.rates.win/100;
@@ -1027,7 +1039,7 @@ function helpPlayer(){
     ${mImg("b_open.jpg","受付中の大画面。左に単勝オッズ、右に連単・連複・3連複のオッズ")}
     ${mImg("b_closed.jpg","締切のあと。誰がどの馬券を何枚買ったかが公開される")}
     ${mImg("b_result.jpg","結果発表。表彰台、払戻の倍率、当てた人")}
-    ${mImg("p_result.jpg","左：締切後のスマホ。右：当たると「的中！」画面（タップで閉じる）")}<p>外れたときは「LOSE」画面が出て、そのレースで賭けた枚数が表示されます。馬券を買っていないレースでは何も出ません。</p>
+    ${mImg("p_result.jpg","左：締切後のスマホ。右：当たると「的中！」画面（タップで閉じる）")}<p>締切のあとは、「締切！」のすぐ下に「あなたの馬券」が出ます。買った馬券ごとに、枚数×倍率と「当たれば〇枚」がわかります。結果が出ると「的中 +〇〇」か「はずれ」に変わります。</p><p>外れたときは「LOSE」画面が出て、そのレースで賭けた枚数が表示されます。馬券を買っていないレースでは何も出ません。</p>
     ${mImg("p_final.jpg","左：本日の最終ポイント。右：成績表タブ")}
     <ul class="mlist"><li>全レースが終わると「本日の最終ポイント」が出ます。配られた枚数からどれだけ増えたか、何位かがわかります。</li><li>「成績表」タブには自分のデータだけが出ます。一番上が今の成績（残高・増減・順位）、その下が今日のレースごとの自分の馬券とチップの増減です。</li><li>下の「通算」には遊んだ日の一覧が出ます。日付を押すと、その日のレースと馬券が見られます。</li></ul>`)}</div>
   <div id="m-faq">${mSec("困ったとき","FAQ",`
@@ -1355,10 +1367,21 @@ function renderBet(){
   const closedMsg = !live ? (r.status==="done" ? resultMine(r,me) : `<div class="cheer"><h2>締切！</h2><p class="muted">オッズ画面で馬券公開中。レースを楽しんで！</p></div>`) : "";
   const nr=races()[S.state.cur+1], nextUp = nr && nr.runners.includes(me) ? `<div class="nextup"><span>次のレースはあなたの出番！</span><span><b>${laneIdx(nr,me)+1}P</b> ${["赤","青","緑","黄"][laneIdx(nr,me)]}</span></div>` : "";
   return `<div class="bet">${head}${topTabs}${finalCard(me)}${nextUp}${banner}${closedMsg}
+    ${live?"":myTicketsClosed(r,me,O,mine)}
     <div class="rcards">${cards}</div>
     ${live?marksPanel(r,me):""}
     ${live?`<div class="tabs">${tabs}</div><p class="hint">${MK[m].ordered&&n>1?"1着から順番にタップ":"タップで選択"}（もう一度タップで解除）</p>`:""}
-    ${myList}${bar}</div>`;
+    ${live?myList:""}${bar}</div>`;
+}
+/* 締切後：自分が買った馬券を大きく。倍率・当たればいくら（結果が出たら的中／はずれ） */
+function myTicketsClosed(r,me,O,mine){
+  const done=r.status==="done"&&r.settle, total=mine.reduce((a,t)=>a+t.amt,0);
+  if(!mine.length) return `<div class="mybox"><h2>あなたの馬券</h2><p class="muted" style="margin:0">このレースは賭けていません</p></div>`;
+  const rows=mine.map(t=>{ const e=O.odds[t.m][keyOf(t.m,t.sel)], v=e?e.v:0, pay=done?ticketPay(r,t):0;
+    const right = done ? (pay?`<b class="hitp">的中 +${pay}</b>`:'<span class="muted">はずれ</span>') : `<span class="muted" style="font-size:12px">当たれば</span> <b class="num">${Math.floor(t.amt*v)}</b>枚`;
+    return `<div class="myt ${done?(pay?"won":"miss"):""}"><div class="myt1"><b>${MK[t.m].label}</b>${selHtml(r,t.m,t.sel,true)}</div>
+      <div class="myt2"><span><b class="num">${t.amt}</b>枚 × <b class="num odd">${fmtO(v)}</b>倍</span><span>${right}</span></div></div>`; }).join("");
+  return `<div class="mybox"><h2>あなたの馬券 <span class="muted" style="font-size:13px;font-weight:700">合計 ${total}枚</span></h2>${rows}</div>`;
 }
 function marksPanel(r,me){
   const d=S.bets[S.uid]||{}, mk=(d.marks&&d.marks[r.id])||{};

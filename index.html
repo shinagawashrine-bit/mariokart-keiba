@@ -372,8 +372,23 @@ body[data-race="dobe"] .qr .code{background:#fff}
 .rchip button{padding:5px 10px;font-weight:900;font-style:italic}
 .rchip button+button{padding:5px 8px;color:var(--muted);border-left:2px solid var(--ink)}
 .rchip button.warn2{color:#fff;background:var(--red)}
-.btabs{display:grid;grid-template-columns:1fr 1fr auto;gap:0;background:var(--carbon)}
-.btabs button{padding:10px;font-weight:900;font-style:italic;color:#a9a9b3}
+.manual{display:grid;gap:14px;margin-top:12px;max-width:860px}
+.mpage{padding-bottom:20px}
+.mh1{font-size:30px;font-style:italic;margin:14px 0 10px}
+.mtoc{display:flex;flex-wrap:wrap;gap:6px}
+.mtoc button{background:var(--paper);border:1px solid #0000001f;padding:7px 12px;font-weight:700;font-size:13px;border-radius:var(--r);color:var(--ink);cursor:pointer}
+.msec{scroll-margin-top:12px;line-height:1.7}
+.msec p{margin:0 0 10px}
+.msec h3{font-size:16px;margin:16px 0 8px;font-style:italic}
+.msec h3:first-of-type{margin-top:4px}
+.mlist{margin:0 0 10px;padding-left:1.4em;display:grid;gap:4px}
+.mfig{margin:6px 0 14px;display:grid;gap:6px}
+.mfig img{width:100%;max-width:720px;height:auto;display:block;border-radius:var(--r);border:1px solid #0000001a;background:#f4f4f2}
+.mfig figcaption{font-size:12px;color:var(--muted)}
+.mtbl td,.mtbl th{vertical-align:top}
+.mtbl code{font-size:12px;word-break:break-all}
+.btabs{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:0;background:var(--carbon)}
+.btabs button{padding:10px 6px;font-weight:900;font-style:italic;color:#a9a9b3}
 .btabs button.on{background:var(--red);color:#fff;clip-path:var(--cut)}
 .mstats{display:grid;gap:4px}
 .ms{background:var(--paper);padding:10px 12px;border-left:4px solid var(--line);display:grid;gap:6px}
@@ -880,8 +895,150 @@ function celHtml(){
   return `<div class="overlay ov-win" data-act="celClose">${coins}${confetti(30)}<div class="inner"><div class="gp-top">${c.title}</div><div class="stamp">${c.head}</div><div class="bigwin">+${c.pay+c.prize}</div><p class="sub2">${c.pay+c.prize}枚${c.prize&&c.pay?`（賞金${c.prize}枚込み）`:""}</p><p class="cel-close">タップで閉じる</p></div></div>`;
 }
 
+/* ---------------- manual ---------------- */
+const MAN_IMG = "manual/";
+function mImg(f, alt){ return `<figure class="mfig"><img src="${MAN_IMG}${f}" alt="${alt}" loading="lazy"><figcaption>${alt}</figcaption></figure>`; }
+function mSec(title, tag, body){ return `<section class="panel msec"><h2>${title} <span class="tag">${tag}</span></h2>${body}</section>`; }
+function manualToc(items){ return `<nav class="mtoc" aria-label="目次">${items.map(([id,t])=>`<button type="button" data-act="mjump" data-id="${id}">${t}</button>`).join("")}</nav>`; }
+function helpPlayer(){
+  return `<div class="manual">
+  ${manualToc([["m-intro","はじめに"],["m-ready","準備"],["m-kinds","馬券の種類"],["m-bet","投票のしかた"],["m-run","自分が走るとき"],["m-result","結果と成績"],["m-faq","困ったとき"]])}
+  <div id="m-intro">${mSec("はじめに","ABOUT",`
+    <p>4人が走るマリオカートのレースに、残りの人がスマホからチップを賭けて遊ぶゲームです。アカウント登録やアプリのインストールはいりません。</p>
+    <ol class="mlist"><li><b>受付中</b>：スマホから馬券を買う</li><li><b>締切</b>：カウントダウンが終わると締切。大画面にみんなの馬券が公開される</li><li><b>レース</b>：4人が走る</li><li><b>結果発表</b>：当たった人にチップが払い戻される</li></ol>
+    <p>予選を何回か行ったあと、上位4人の「G1 グランプリ」と下位4人の「D1 ドベ決定戦」で決勝。最後に表彰式があります。</p>
+    <ul class="mlist"><li>チップは主催者から配られます。</li><li>自分が走る番のレースは、ほかの人に賭けられません。</li></ul>`)}</div>
+  <div id="m-ready">${mSec("準備","READY",`
+    <ol class="mlist"><li>大画面のQRコードを読み取るか、主催者から送られたURLを開く</li><li>「あなたは誰？」で自分の名前をタップする</li><li>名前と残高（持っているチップ）が出たら準備完了</li></ol>
+    ${mImg("p_start.jpg","左：名前を選ぶ画面。右：選んだあとの画面。右上の数字が残高")}
+    <ul class="mlist"><li>名前がないときは、主催者に登録してもらってください。</li><li>選んだ名前はスマホが覚えています。閉じても、次に開けば続きから使えます。</li><li>違う人の名前を選ぶと、その人のチップで賭けてしまいます。間違えたら名前の上の「変更」で選び直してください。</li><li>ホーム画面に追加しておくと、すぐ開けます（iPhone は Safari の共有ボタン、Android は Chrome の「︙」から「ホーム画面に追加」）。</li></ul>`)}</div>
+  <div id="m-kinds">${mSec("馬券の種類","TICKETS",`
+    <p>当てるのが難しい馬券ほど、倍率が高くなります。賭けるのは${unit()}枚単位です。</p>
+    <div class="scroll"><table class="tbl mtbl"><tr><th>馬券</th><th>当てるもの</th><th>使えるレース</th><th class="r">1レースの上限</th></tr>
+    <tr><td><b>単勝</b></td><td>1着の人</td><td>すべて</td><td class="r">なし</td></tr>
+    <tr><td><b>連単</b></td><td>1着→2着を順番どおり</td><td>すべて</td><td class="r">${settings().caps.ex||"なし"}${settings().caps.ex?"枚":""}</td></tr>
+    <tr><td><b>連複</b></td><td>1・2着の2人（順不同）</td><td>すべて</td><td class="r">${settings().caps.qu||"なし"}${settings().caps.qu?"枚":""}</td></tr>
+    <tr><td><b>3連複</b></td><td>1〜3着の3人（順不同）＝ドベ当て</td><td>すべて</td><td class="r">${settings().caps.tri||"なし"}${settings().caps.tri?"枚":""}</td></tr>
+    <tr><td><b>3連単</b></td><td>1→2→3着を順番どおり</td><td>決勝のみ</td><td class="r">${settings().caps.t3||"なし"}${settings().caps.t3?"枚":""}</td></tr></table></div>
+    <ul class="mlist"><li>倍率（オッズ）はみんなの賭け方で締切まで動きます。人気が集まる人ほど下がります。</li><li>払い戻しは「賭けた枚数 × 倍率」。1枚未満は切り捨てです。</li><li>予想の印（◎本命・○対抗・▲単穴）も付けられます。チップは使いません。大画面に「みんなの本命」が出ます。</li></ul>
+    ${mImg("p_marks.jpg","予想の印の入力欄。行ごとに選手の番号をタップ")}`)}</div>
+  <div id="m-bet">${mSec("投票のしかた","HOW TO BET",`
+    <p>「受付中」のあいだに「投票」タブから買います。締切のあとは買えません。</p>
+    <ol class="mlist"><li>タブで馬券の種類（単勝・連単など）を選ぶ</li><li>走る4人のカードから、賭ける人をタップ（連単・3連単は1着の人から順に。もう一度タップで解除）</li><li>一番下の「−」「＋」で枚数を決める。「当たれば ○枚」と目安が出る</li><li>「賭ける！」を押す</li></ol>
+    ${mImg("p_bet.jpg","左：単勝で藤村を選び60枚にしたところ。右：賭けたあと「このレースの馬券」に並んだところ")}
+    <ul class="mlist"><li>締切前なら「このレースの馬券」の「取消」で取り消せて、チップも戻ります。</li><li>1レースで何枚でも、何種類でも買えます（上限は「馬券の種類」の表）。</li></ul>`)}</div>
+  <div id="m-run">${mSec("自分が走るとき","RACER",`
+    <p>自分の番の1つ前のレースで「次のレースはあなたの出番！」と出ます。画面に出た番号のコントローラーで走ってください（1P 赤・2P 青・3P 緑・4P 黄）。</p>
+    ${mImg("p_runner.jpg","左：自分が走るときの画面。右：1着で賞金をもらったところ")}
+    <ul class="mlist"><li>走る人は、ほかの人に賭けられません。買えるのは自分の単勝だけです（「自分の単勝を買う」）。</li><li>1着なら、自分の単勝の払い戻しと賞金の両方がもらえます。</li></ul>
+    <p>賞金は、そのレースの売上（みんなが賭けた枚数の合計）に対する割合です。</p>
+    <div class="scroll"><table class="tbl mtbl"><tr><th>レース</th><th class="r">1着</th><th class="r">2着</th></tr>
+    <tr><td>予選</td><td class="r">${settings().prizes.prelim[0]||0}%</td><td class="r">${settings().prizes.prelim[1]?settings().prizes.prelim[1]+"%":"なし"}</td></tr>
+    <tr><td>G1 グランプリ</td><td class="r">${settings().prizes.g1[0]||0}%</td><td class="r">${settings().prizes.g1[1]?settings().prizes.g1[1]+"%":"なし"}</td></tr>
+    <tr><td>D1 ドベ決定戦</td><td class="r">${settings().prizes.dobe[0]||0}%</td><td class="r">${settings().prizes.dobe[1]?settings().prizes.dobe[1]+"%":"なし"}</td></tr></table></div>`)}</div>
+  <div id="m-result">${mSec("大画面・結果・成績","RESULTS",`
+    <p>締切から結果発表までは、大画面をみんなで見ます。払い戻しは自動で残高に入ります。</p>
+    ${mImg("b_open.jpg","受付中の大画面。左に単勝オッズ、右に連単・連複・3連複のオッズ")}
+    ${mImg("b_closed.jpg","締切のあと。誰がどの馬券を何枚買ったかが公開される")}
+    ${mImg("b_result.jpg","結果発表。表彰台、払戻の倍率、当てた人")}
+    ${mImg("p_result.jpg","左：締切後のスマホ。右：当たると「的中！」画面（タップで閉じる）")}
+    ${mImg("p_final.jpg","左：本日の最終ポイント。右：成績表タブ")}
+    <ul class="mlist"><li>全レースが終わると「本日の最終ポイント」が出ます。配られた枚数からどれだけ増えたか、何位かがわかります。</li><li>「成績表」タブで、今日と通算の着順・勝率・収支が見られます。</li></ul>`)}</div>
+  <div id="m-faq">${mSec("困ったとき","FAQ",`
+    <div class="scroll"><table class="tbl mtbl"><tr><th>こんなとき</th><th>こうする</th></tr>
+    <tr><td>自分の名前がない</td><td>主催者に登録してもらう</td></tr>
+    <tr><td>違う人の名前を選んだ</td><td>名前の上の「変更」で選び直す</td></tr>
+    <tr><td>「賭ける！」が押せない</td><td>ボタンの上の説明を見る。「2人選んでね」なら選ぶ人が足りない、「チップが足りません」なら枚数を減らす</td></tr>
+    <tr><td>間違えて買った</td><td>締切前なら「取消」。締切後は取り消せない</td></tr>
+    <tr><td>スマホの充電が切れた</td><td>主催者に「代理入力」で賭けてもらう</td></tr>
+    <tr><td>画面が動かない</td><td>ページを再読み込み。馬券と残高は消えない</td></tr>
+    <tr><td>音を消したい・鳴らしたい</td><td>「音 ON / 音 OFF」で切り替え</td></tr>
+    <tr><td>途中参加・先に帰る</td><td>主催者に伝える。出走表は自動で組み直される</td></tr></table></div>`)}</div>
+  </div>`;
+}
+function helpAdmin(){
+  return `<div class="manual">
+  ${manualToc([["a-urls","画面とURL"],["a-prep","当日の準備"],["a-race","レースの進め方"],["a-final","決勝と表彰式"],["a-trouble","トラブル対応"],["a-after","終わったあと"]])}
+  <div id="a-urls">${mSec("使う画面とURL","LINKS",`
+    <p>主催者は「管理画面」（自分のPC）と「大画面」（テレビにつないだPC）の2つを開いて進行します。参加者には投票用のURLだけを配ります。</p>
+    <div class="scroll"><table class="tbl mtbl"><tr><th>画面</th><th>使う端末</th><th>URL</th></tr>
+    <tr><td>管理画面</td><td>主催者のPC</td><td><code>${BASE_URL}#admin</code></td></tr>
+    <tr><td>大画面（オッズ画面）</td><td>テレビ・モニター（全画面表示）</td><td><code>${BASE_URL}#board</code></td></tr>
+    <tr><td>投票画面</td><td>参加者のスマホ</td><td><code>${BASE_URL}#bet</code></td></tr>
+    <tr><td>成績表</td><td>誰でも</td><td><code>${BASE_URL}#stats</code></td></tr></table></div>
+    ${mImg("urls.jpg","管理画面のURL欄。「コピー」でLINEなどに貼り付けて配れる")}
+    <ul class="mlist"><li>遊ぶには5人以上必要です（4人が走って、残りが賭ける）。</li><li>管理用のURLと暗証番号は参加者に教えないでください。知っていれば誰でもチップを配ったりリセットしたりできます。</li></ul>`)}</div>
+  <div id="a-prep">${mSec("当日の準備","SETUP",`
+    <h3>1. 管理画面を開く</h3>
+    <ol class="mlist"><li>管理用URLを開き、暗証番号を入れて「開く」（一度入れた端末は次回から不要）</li><li>テレビにつないだPCで大画面用URLを開き、全画面表示にする</li></ol>
+    <h3>2. メンバーを登録する</h3>
+    <ul class="mlist"><li>初めての人：「名前を入力」に名前を入れて「追加」</li><li>2回目から：「いつものメンバー」の名前をタップ。「全員参加」でまとめて追加</li></ul>
+    <h3>3. チップを配る</h3>
+    <p>各自の行の「枚」に枚数を入れて青い「配る」。全員に同じ枚数を配るのがおすすめです。配りすぎたら「減らす」。</p>
+    ${mImg("members.jpg","8人を登録し、各1000枚を配ったところ")}
+    <p>参加者がスマホで名前を選ぶと「スマホ接続」と出ます。全員に付いたか確かめてから始めると安心です。</p>
+    <h3>4. 出走表を作る</h3>
+    <p>予選のレース数と決勝のあり・なしを選び、「出走表を作ってスタート」。押した瞬間に第1レースの受付が始まります。</p>
+    ${mImg("schedule.jpg","予選のレース数のボタンと、G1・D1のあり・なし")}
+    <ul class="mlist"><li>「（全員2回）」は一人が予選で走る回数。「（1〜2回）」は回数に差が出ます。</li><li>決勝をつけると、このあとに2レース増えます。</li><li>出走表は、全員の走る回数がそろい、同じ人が続けて走らないように自動で組まれます。</li><li>最初のレースで誰かが賭ける前なら「出走表を作り直す」で組み直せます。</li></ul>`)}</div>
+  <div id="a-race">${mSec("レースの進め方","RACE CONTROL",`
+    <p>どのレースも「レース進行」のボタンを上から順に押すだけで進みます。</p>
+    <h3>1. 受付中</h3>
+    ${mImg("race_open.jpg","受付中。緑の「✓ 名前」は賭け終わった人")}
+    <p>走る4人に、画面の番号（1P〜4P）のコントローラーを持ってもらいます。</p>
+    <h3>2. 締め切る</h3>
+    <p>「締切カウントダウン」を押すと残り時間が出て、0で自動的に締切。大画面に馬券が公開されます。</p>
+    ${mImg("countdown.jpg","カウントダウン中。「＋30秒」で延長、「即締切」ですぐ締め切る")}
+    <p>カウントダウン中は管理画面を開いたままにしてください。自動の締切は管理画面が動かしています。</p>
+    <h3>3. 着順を入れる</h3>
+    <ol class="mlist"><li>走った4人を1着から順にタップ（3人押せば4人目は自動）</li><li>間違えたら「やり直し」</li><li>「この着順で確定」</li></ol>
+    ${mImg("order.jpg","藤村が1着、渡邉が2着と入ったところ")}
+    <h3>4. 次のレースへ</h3>
+    <p>結果をみんなで見たら「次のレースへ」。次のレースの受付が始まります。</p>
+    ${mImg("done.jpg","確定後。結果・売上・的中件数・賞金の合計")}`)}</div>
+  <div id="a-final">${mSec("決勝と表彰式","FINALS",`
+    <p>予選が全部終わると「決勝を組む」が出ます。予選の平均点（1着4点・2着3点・3着2点・4着1点）で、上位4人がG1、下位4人がD1に出ます。D1が先、G1が最後です。決勝だけ3連単が買えます。</p>
+    ${mImg("makefinals.jpg","予選が終わると出る「決勝を組む」")}
+    ${mImg("b_d1.jpg","D1 ドベ決定戦の大画面")}
+    ${mImg("b_g1.jpg","G1 グランプリの大画面")}
+    ${mImg("b_g1result.jpg","G1の優勝発表")}
+    <p>G1を確定すると「表彰式を始める」が出ます。押すと大画面で表彰式が始まり、参加者のスマホに「本日の最終ポイント」が出ます。終えるときは「表彰式を閉じる」。</p>
+    ${mImg("alldone.jpg","全レース終了後の「表彰式を始める」")}
+    ${mImg("b_ceremony.jpg","表彰式の大画面")}
+    <div class="scroll"><table class="tbl mtbl"><tr><th>賞</th><th>選ばれる人</th></tr><tr><td>MVP</td><td>今日いちばんチップを増やした人</td></tr><tr><td>的中王</td><td>当てた回数がいちばん多い人</td></tr><tr><td>大穴賞</td><td>いちばん高い倍率を当てた人</td></tr><tr><td>G1チャンピオン</td><td>G1 グランプリの1着</td></tr></table></div>`)}</div>
+  <div id="a-trouble">${mSec("途中のトラブル対応","TROUBLE",`
+    <div class="scroll"><table class="tbl mtbl"><tr><th>こんなとき</th><th>管理画面でやること</th></tr>
+    <tr><td>遅れて来た人がいる</td><td>「＋ 途中参加」→ 名前を入れて「途中参加」→ チップを配る</td></tr>
+    <tr><td>先に帰る人がいる</td><td>その人の行の「離脱」。戻ってきたら「復帰」</td></tr>
+    <tr><td>スマホがない・充電切れの人がいる</td><td>受付中に出る「代理入力」で「誰の馬券？」→ 種類 → 選手 → 枚数 →「代理で賭ける」</td></tr>
+    <tr><td>締切を早まった</td><td>着順を入れる前に「締切を取り消す」</td></tr>
+    <tr><td>着順を間違えた（確定前）</td><td>「やり直し」</td></tr>
+    <tr><td>着順を間違えた（確定後）</td><td>「次のレースへ」の前に「結果を取り消す」。払い戻しも取り消され、入れ直せる</td></tr>
+    <tr><td>チップがなくなった人がいる</td><td>その人の行で枚数を入れて「配る」</td></tr></table></div>
+    <ul class="mlist"><li>途中参加・離脱・復帰のたびに、まだ始まっていない予選が自動で組み直されます。</li><li>今のレースを走っている人は、終わるまで離脱できません。</li><li>管理画面を閉じてもデータは消えません。開き直せば続きから進められます。</li></ul>`)}</div>
+  <div id="a-after">${mSec("終わったあと","AFTER",`
+    <h3>成績表と胴元の収支</h3>
+    <p>「全員の成績表を開く」で名簿全員の成績と今日の馬券成績が見られます。「胴元の収支」はレースごとの売上と胴元のもうけで、管理画面にだけ出ます。</p>
+    ${mImg("a_stats.jpg","成績表")}
+    ${mImg("house.jpg","胴元の収支")}
+    <h3>CSVの保存とリセット</h3>
+    <ol class="mlist"><li>「馬券データCSV」「レース結果CSV」で保存（次回の倍率や払戻率の見直しに使える）</li><li>「ゲームをリセット」→「リセットする」</li></ol>
+    ${mImg("data.jpg","CSVの保存とリセット")}
+    <ul class="mlist"><li>リセットで消えるのは、今日のメンバー・チップ・出走表・馬券です。</li><li>名簿、これまでの成績、ルール設定は消えません。</li><li>試しに遊んだあとも、リセットしてから本番を始めてください。</li></ul>
+    <h3>ルール設定（必要なときだけ）</h3>
+    <p>「ルール設定」で払戻率・上限・締切の秒数・賭けの単位・賞金の割合・見せ金を変えて「設定を保存」できます。初めてなら、そのままで大丈夫です。</p>`)}</div>
+  </div>`;
+}
+function renderHelp(){
+  return `<div class="bet mpage">${logo()}<h1 class="mh1">遊びかた</h1><div class="row" style="margin:-4px 0 14px"><a class="btn sm go" href="#bet">投票画面へ</a></div>${helpPlayer()}<div class="row" style="margin-top:16px"><a class="btn go" href="#bet">投票画面へ</a></div></div>`;
+}
+function renderAdminHelp(){
+  if(!S.isOwner) return renderAdmin();
+  return `<div class="admin wrap mpage"><div class="topnav">${logo()}<div class="links"><a class="btn sm go" href="#admin">管理画面へ戻る</a><a class="btn sm" href="#help">参加者用の遊びかた</a></div></div><h1 class="mh1">管理者マニュアル</h1>${helpAdmin()}<div class="row" style="margin:16px 0 40px"><a class="btn go" href="#admin">管理画面へ戻る</a></div></div>`;
+}
+
 /* ---------------- render ---------------- */
-function mode(){ const h=(location.hash||"").replace("#",""); return ["admin","board","bet","stats"].includes(h)?h:""; }
+function mode(){ const h=(location.hash||"").replace("#",""); return ["admin","board","bet","stats","help","adminhelp"].includes(h)?h:""; }
 function render(){
   const app=document.getElementById("app");
   const ae=document.activeElement, aid=ae&&ae.id, selS=ae&&ae.selectionStart;
@@ -889,11 +1046,13 @@ function render(){
   const md=mode();
   if(S.ready&&S.state) S.ps=pstats();
   if(!md) html=renderPicker();
+  else if(md==="help") html=renderHelp();
   else if(S.noDb) html=renderNoDb();
   else if(!S.ready) html=`<div class="picker"><div>${logo()}<p class="muted" style="text-align:center">読み込み中…</p></div></div>`;
   else if(md==="board") html=renderBoard();
   else if(md==="bet") html=renderBet();
   else if(md==="stats") html=renderStats();
+  else if(md==="adminhelp") html=renderAdminHelp();
   else html=renderAdmin();
   app.innerHTML=html;
   const cr=S.ready&&S.state&&!S.noDb?curRace():null;
@@ -910,6 +1069,7 @@ function renderPicker(){
       <a href="#board" class="pick c1" style="color:inherit;text-decoration:none"><span class="k">TV / MONITOR</span><b>オッズ画面</b><span class="muted">みんなで見る大画面。全画面表示がおすすめ</span></a>
       <a href="#admin" class="pick c3" style="color:inherit;text-decoration:none"><span class="k">HOST PC</span><b>管理画面</b><span class="muted">メンバー登録・締切・着順入力・チップ送付</span></a>
       <a href="#stats" class="pick c2" style="color:inherit;text-decoration:none"><span class="k">RECORDS</span><b>成績表</b><span class="muted">今日と通算の着順・勝率・収支</span></a>
+      <a href="#help" class="pick c0" style="color:inherit;text-decoration:none"><span class="k">HOW TO PLAY</span><b>遊びかた</b><span class="muted">はじめての人はここから</span></a>
     </div></div></div>`;
 }
 function renderNoDb(){
@@ -1053,14 +1213,15 @@ function renderBet(){
   if(!S.uid) return `<div class="bet"><div class="warn">投票するには claude.ai にログインして、このページの編集者として招待してもらってください。</div><a class="btn" href="#">戻る</a></div>`;
   const me=myMember();
   if(!me || S.ui.claimOpen){
-    if(!members().length) return `<div class="bet">${logo()}<div class="note">まだメンバーが登録されていません。管理画面での登録を待ってね。</div></div>`;
-    return `<div class="bet">${logo()}<h2 style="font-size:24px">あなたは誰？</h2><div class="claim">${members().map(m=>`<button data-act="claim" data-id="${m.id}">${esc(m.name)}</button>`).join("")}</div>${me?`<button class="btn ghost" data-act="claimCancel">キャンセル</button>`:""}</div>`;
+    if(!members().length) return `<div class="bet">${logo()}<div class="note">まだメンバーが登録されていません。管理画面での登録を待ってね。</div><p style="margin-top:18px"><a class="btn sm" href="#help">遊びかたを見る</a></p></div>`;
+    return `<div class="bet">${logo()}<h2 style="font-size:24px">あなたは誰？</h2><div class="claim">${members().map(m=>`<button data-act="claim" data-id="${m.id}">${esc(m.name)}</button>`).join("")}</div>${me?`<button class="btn ghost" data-act="claimCancel">キャンセル</button>`:""}<p style="margin-top:18px"><a class="btn sm" href="#help">遊びかたを見る</a></p></div>`;
   }
   const bal=balances()[me]||0, r=curRace();
   const head=`<div class="me"><div><div class="muted" style="font-size:12px">PLAYER <button class="btn sm ghost" data-act="claimOpen" style="padding:0 4px;font-size:12px;text-decoration:underline">変更</button></div><div class="nm">${esc(mname(me))}</div></div><div style="text-align:right"><div class="bal">${coin()}<span>${bal}</span></div></div></div>`;
   const bt=S.ui.btab||"bet";
-  const topTabs=`<div class="btabs">${[["bet","投票"],["stats","成績表"]].map(([k,l])=>`<button class="${bt===k?"on":""}" data-act="btab" data-t="${k}">${l}</button>`).join("")}${soundBtn()}</div>`;
+  const topTabs=`<div class="btabs">${[["bet","投票"],["stats","成績表"],["help","遊びかた"]].map(([k,l])=>`<button class="${bt===k?"on":""}" data-act="btab" data-t="${k}">${l}</button>`).join("")}${soundBtn()}</div>`;
   if(bt==="stats") return `<div class="bet" style="padding-bottom:40px">${head}${topTabs}${statsMobile()}</div>`;
+  if(bt==="help") return `<div class="bet" style="padding-bottom:40px">${head}${topTabs}${helpPlayer()}</div>`;
   if(!r) return `<div class="bet">${head}${topTabs}<div class="note">レースの準備中です。出走表ができるまで待ってね。</div></div>`;
   const tix=raceTickets(r), O=computeOdds(r,tix); trackFlash(O);
   const rem=remain(r), live=isLive(r);
@@ -1177,7 +1338,7 @@ function renderAdmin(){
   if(!S.isOwner) return window.MK_WEB ? `<div class="bet">${logo()}<div class="panel"><h2>管理画面 <span class="tag">ADMIN</span></h2><p class="muted" style="margin:0 0 10px">暗証番号を入れてください。この端末では次回から入力不要になります。</p><div class="row"><input id="adminPin" data-bind="adminPin" type="password" inputmode="numeric" placeholder="暗証番号" value="${esc(S.ui.form.adminPin||"")}" style="flex:1"><button class="btn go" data-act="pin">開く</button></div></div><a class="btn" href="#">戻る</a></div>` : `<div class="bet">${logo()}<div class="warn">管理画面はこのページのオーナーだけが使えます。</div><a class="btn" href="#">戻る</a></div>`;
   const st=S.state||defaultState();
   return `<div class="admin wrap">
-    <div class="topnav">${logo()}<div class="links"><a class="btn sm" href="#board" target="_self">オッズ画面</a><a class="btn sm" href="#bet">投票画面</a><a class="btn sm" href="#stats">成績表</a></div></div>
+    <div class="topnav">${logo()}<div class="links"><a class="btn sm" href="#board" target="_self">オッズ画面</a><a class="btn sm" href="#bet">投票画面</a><a class="btn sm" href="#stats">成績表</a><a class="btn sm go" href="#adminhelp">管理者マニュアル</a></div></div>
     <div class="checker"></div>
     <div class="agrid">
       <div class="acol">${adminRace()}${adminFinal()}${adminProxy()}${adminRaces()}${betTable()}${adminHouse()}<div class="panel"><h2>成績表 <span class="tag">RECORDS</span></h2><p class="muted" style="margin:0 0 10px">管理画面からは、名簿の全員の通算成績が見られます。</p><a class="btn go" href="#stats">全員の成績表を開く</a></div></div>
@@ -1307,6 +1468,7 @@ const A={
   sound(){ SFX.on=!SFX.on; try{ localStorage.setItem("mk_sound",SFX.on?"1":"0"); }catch(e){} if(SFX.on){ audio(); play("coin"); } render(); },
   celClose(){ S.cel=null; render(); },
   btab(d){ S.ui.btab=d.t; render(); },
+  mjump(d){ const el=document.getElementById(d.id); if(el) el.scrollIntoView({behavior:"smooth",block:"start"}); },
   stScope(d){ S.ui.stScope=d.s; render(); },
   copyUrl(d){ const u=d.u; try{ navigator.clipboard.writeText(u).then(()=>toast("コピーしました"),()=>toast("長押しでコピーしてね")); }catch(e){ toast("長押しでコピーしてね"); } },
   claimOpen(){ S.ui.claimOpen=true; render(); },
@@ -1480,7 +1642,7 @@ let lastStatusKey="";
 setInterval(()=>{
   const r=curRace(); if(!r) return;
   document.querySelectorAll("[data-cd]").forEach(el=>{ const s=remain(r); if(s!==null){ el.textContent=mmss(s); el.classList.toggle("hot",s<=10); } });
-  if(mode()==="admin" && S.isOwner && r.status==="countdown" && now()>=r.closeAt && !S.closing){
+  if((mode()==="admin"||mode()==="adminhelp") && S.isOwner && r.status==="countdown" && now()>=r.closeAt && !S.closing){
     S.closing=true; S.ui.order=[]; mutateState(s=>{ const x=s.races[s.cur]; if(x.status==="countdown") x.status="closed"; }).finally(()=>S.closing=false);
   }
   sfxWatch();

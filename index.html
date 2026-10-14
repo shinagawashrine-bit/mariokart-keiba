@@ -1575,8 +1575,8 @@ function renderAdmin(){
     <div class="topnav">${logo()}<div class="links"><a class="btn sm" href="#board" target="_self">オッズ画面</a><a class="btn sm" href="#bet">投票画面</a><a class="btn sm" href="#stats">成績表</a><a class="btn sm go" href="#adminhelp">管理者マニュアル</a></div></div>
     <div class="checker"></div>
     <div class="agrid">
-      <div class="acol">${adminRace()}${adminRaces()}${adminProxy()}${adminFinal()}${betTable()}<div class="panel"><h2>成績表 <span class="tag">RECORDS</span></h2><p class="muted" style="margin:0 0 10px">管理画面からは、名簿の全員の通算成績が見られます。</p><a class="btn go" href="#stats">全員の成績表を開く</a></div></div>
-      <div class="acol">${adminUrls()}${adminMembers()}${adminHouse()}${adminSchedule()}${adminSettings()}${adminData()}</div>
+      <div class="acol">${adminRace()}${adminRaces()}${adminProxy()}${adminFinal()}${betTable()}</div>
+      <div class="acol">${adminUrls()}${adminMembers()}${adminHouse()}${adminSchedule()}${adminSettings()}<div class="panel"><h2>成績表 <span class="tag">RECORDS</span></h2><p class="muted" style="margin:0 0 10px">管理画面からは、名簿の全員の通算成績が見られます。</p><a class="btn go" href="#stats">全員の成績表を開く</a></div>${adminData()}</div>
     </div></div>`;
 }
 function adminRace(){

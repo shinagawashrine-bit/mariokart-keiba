@@ -355,6 +355,13 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .orderpick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 .orderpick button{padding:10px 6px;background:var(--lt);border-top:4px solid var(--lc);display:grid;gap:4px;justify-items:center;position:relative;font-weight:900;font-style:italic}
 .orderpick button .pos{position:absolute;top:4px;right:4px;background:var(--carbon);color:#fff;font-family:var(--f-num);font-weight:800;font-style:italic;padding:1px 10px 1px 6px;font-size:14px;clip-path:var(--cut)}
+.foldsum{cursor:pointer;list-style:none;font-size:17px;font-weight:900;font-style:italic;display:flex;align-items:center;gap:10px;margin:-16px -16px 0;padding:8px 16px;background:var(--carbon);color:#fff}
+.foldsum::-webkit-details-marker{display:none}
+.foldsum::after{content:"▼ 開く";margin-left:auto;font-size:11px;font-style:normal;color:#b9b9c2}
+details[open]>.foldsum{margin-bottom:14px}
+details:not([open])>.foldsum{margin-bottom:-16px}
+details[open]>.foldsum::after{content:"▲ 閉じる"}
+.foldsum .tag{font-family:var(--f-num);font-style:italic;font-weight:800;font-size:12px;letter-spacing:.2em;color:var(--red)}
 .racelist{display:grid;gap:3px}
 .racelist .ri{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 10px;background:var(--paper2);font-size:14px}
 .racelist .ri .num{font-size:18px}
@@ -729,12 +736,12 @@ function houseRows(){
 function adminHouse(){
   const rows=houseRows(); if(!rows.length) return "";
   const sum=k=>rows.reduce((a,x)=>a+x[k],0), sg=v=>`<span class="${v>0?"plus":v<0?"minus":""}">${v>0?"+":""}${v}</span>`;
-  return `<div class="panel"><h2>胴元の収支 <span class="tag">HOUSE</span></h2>
+  return `<div class="panel"><details data-fold="house" ${foldOpen("house")}><summary class="foldsum">胴元の収支 <span class="tag">HOUSE</span></summary>
     <div class="htot"><div><small>合計収支</small><span class="num">${sg(sum("house"))}</span></div><div><small>1レース平均</small><span class="num">${sg(Math.round(sum("house")/rows.length))}</span></div><div><small>売上合計</small><span class="num">${sum("sales")}</span></div><div><small>赤字レース</small><span class="num">${rows.filter(x=>x.house<0).length}/${rows.length}</span></div></div>
     <div class="scroll"><table class="stbl" style="margin-top:10px"><tr><th>レース</th><th>売上</th><th>単勝の利益</th><th>連系の利益</th><th>賞金</th><th>収支</th></tr>
-    ${rows.map(x=>`<tr><td><b>${esc(raceTitle(x.r))}</b></td><td class="num">${x.sales}</td><td class="num">${sg(x.win)}</td><td class="num">${sg(x.ex)}</td><td class="num">-${x.prize}</td><td class="num">${sg(x.house)}</td></tr>`).join("")}
-    <tr style="border-top:2px solid var(--ink)"><td><b>合計</b></td><td class="num">${sum("sales")}</td><td class="num">${sg(sum("win"))}</td><td class="num">${sg(sum("ex"))}</td><td class="num">-${sum("prize")}</td><td class="num">${sg(sum("house"))}</td></tr></table></div>
-    <p class="muted" style="font-size:12px;margin:8px 0 0">連系＝連単・連複・3連複・3連単。連系がマイナスなら見せ金のぶん胴元が負けたレース。管理画面にだけ表示されます。</p></div>`;
+    ${rows.map(x=>`<tr><td><b>${esc(raceTitle(x.r))}</b></td><td class="num">${x.sales}</td><td class="num">${sg(x.win)}</td><td class="num">${sg(x.ex)}</td><td class="num">${x.prize?"-"+x.prize:0}</td><td class="num">${sg(x.house)}</td></tr>`).join("")}
+    <tr style="border-top:2px solid var(--ink)"><td><b>合計</b></td><td class="num">${sum("sales")}</td><td class="num">${sg(sum("win"))}</td><td class="num">${sg(sum("ex"))}</td><td class="num">${sum("prize")?"-"+sum("prize"):0}</td><td class="num">${sg(sum("house"))}</td></tr></table></div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">連系＝連単・連複・3連複・3連単。連系がマイナスなら見せ金のぶん胴元が負けたレース。管理画面にだけ表示されます。</p></details></div>`;
 }
 function formMini(id){
   const s=S.ps[id]; if(!s||!s.runs) return `<div class="form">初出走${fire(id)}</div>`;
@@ -1002,6 +1009,9 @@ function fsEl(){ return document.fullscreenElement||document.webkitFullscreenEle
 function fsBtn(){ const ok=document.fullscreenEnabled||document.webkitFullscreenEnabled; if(!ok) return "";
   return `<button class="sndbtn ${fsEl()?"on":""}" data-act="fullscreen">${fsEl()?"全画面を終了":"全画面"}</button>`; }
 document.addEventListener("fullscreenchange",()=>render()); document.addEventListener("webkitfullscreenchange",()=>render());
+/* 管理画面のたたむ欄：開いた・閉じたを覚えておく（描き直しで勝手に閉じないように） */
+function foldOpen(k){ return (S.ui.fold||{})[k]?"open":""; }
+document.addEventListener("toggle",e=>{ const d=e.target; if(d&&d.dataset&&d.dataset.fold){ (S.ui.fold=S.ui.fold||{})[d.dataset.fold]=d.open; } },true);
 function soundBtn(){ return `<button class="sndbtn ${SFX.on?"on":""}" data-act="sound" aria-pressed="${SFX.on}">${SFX.on?"音 ON":"音 OFF"}</button>`; }
 document.addEventListener("pointerdown",()=>{ if(SFX.on) audio(); },{once:true});
 
@@ -1182,7 +1192,7 @@ function helpAdmin(){
     <ul class="mlist"><li>途中参加・離脱・復帰のたびに、まだ始まっていない予選が自動で組み直されます。</li><li>今のレースを走っている人は、終わるまで離脱できません。</li><li>管理画面を閉じてもデータは消えません。開き直せば続きから進められます。</li></ul>`)}</div>
   <div id="a-after">${mSec("終わったあと","AFTER",`
     <h3>成績表と胴元の収支</h3>
-    <p>「全員の成績表を開く」で名簿全員の成績と今日の馬券成績が見られます。「胴元の収支」はレースごとの売上と胴元のもうけで、管理画面にだけ出ます。</p>
+    <p>「胴元の収支」「ルール設定」「成績表」「データ」は、ふだんは見出しだけになっています。見出しを押すと開き、もう一度押すと閉じます。</p><p>「全員の成績表を開く」で名簿全員の成績と今日の馬券成績が見られます。「胴元の収支」はレースごとの売上と胴元のもうけで、管理画面にだけ出ます。</p>
     ${mImg("a_stats.jpg","成績表")}
     ${mImg("house.jpg","胴元の収支")}
     <h3>CSVの保存とリセット</h3>
@@ -1576,7 +1586,7 @@ function renderAdmin(){
     <div class="checker"></div>
     <div class="agrid">
       <div class="acol">${adminRace()}${adminRaces()}${adminProxy()}${adminFinal()}${betTable()}</div>
-      <div class="acol">${adminUrls()}${adminMembers()}${adminHouse()}${adminSchedule()}${adminSettings()}<div class="panel"><h2>成績表 <span class="tag">RECORDS</span></h2><p class="muted" style="margin:0 0 10px">管理画面からは、名簿の全員の通算成績が見られます。</p><a class="btn go" href="#stats">全員の成績表を開く</a></div>${adminData()}</div>
+      <div class="acol">${adminUrls()}${adminMembers()}${adminHouse()}${adminSchedule()}${adminSettings()}<div class="panel"><details data-fold="records" ${foldOpen("records")}><summary class="foldsum">成績表 <span class="tag">RECORDS</span></summary><p class="muted" style="margin:0 0 10px">管理画面からは、名簿の全員の通算成績が見られます。</p><a class="btn go" href="#stats">全員の成績表を開く</a></details></div>${adminData()}</div>
     </div></div>`;
 }
 function adminRace(){
@@ -1672,7 +1682,7 @@ function adminSettings(){
   const v=(id,val)=>f[id]!==undefined?f[id]:val;
   const inp=(id,label,val)=>`<label for="${id}">${label}<input id="${id}" type="number" step="any" inputmode="decimal" data-bind="${id}" value="${esc(v(id,val))}"></label>`;
   const tag=k=>L[k]!=null?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">学習中</span>':'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">初期値</span>';
-  return `<div class="panel"><details><summary style="cursor:pointer;font-weight:900;font-style:italic">ルール設定</summary>
+  return `<div class="panel"><details data-fold="settings" ${foldOpen("settings")}><summary class="foldsum">ルール設定 <span class="tag">SETTINGS</span></summary>
     <p class="muted" style="font-size:12px;margin:10px 0">払戻率と賞金の％だけ手で変えられます。そのほかは遊んだ記録から自動で調整します。</p>
     <div class="formgrid">
       ${MORDER.map(m=>inp("rate_"+m,`${MK[m].label} 払戻率%`,st.rates[m])).join("")}
@@ -1698,10 +1708,10 @@ function adminUrls(){
 }
 function adminData(){
   const c=S.ui.confirm==="reset";
-  return `<div class="panel"><h2>データ <span class="tag">EXPORT</span></h2>
+  return `<div class="panel"><details data-fold="data" ${foldOpen("data")}><summary class="foldsum">データ <span class="tag">EXPORT</span></summary>
     <div class="row"><button class="btn" data-act="csvT">馬券データCSV</button><button class="btn" data-act="csvR">レース結果CSV</button></div>
     <p class="muted" style="font-size:12px">遊び終わったらCSVを保存して、次回の見せ金や払戻率の分析に使えます。</p>
-    <div class="row" style="margin-top:6px">${c?`<span class="warn">全データを消して最初からにします。よろしい？</span><button class="btn red" data-act="reset">リセットする</button><button class="btn sm" data-act="cancelConfirm">やめる</button>`:`<button class="btn sm ghost" data-act="askReset">ゲームをリセット</button>`}</div></div>`;
+    <div class="row" style="margin-top:6px">${c?`<span class="warn">全データを消して最初からにします。よろしい？</span><button class="btn red" data-act="reset">リセットする</button><button class="btn sm" data-act="cancelConfirm">やめる</button>`:`<button class="btn sm ghost" data-act="askReset">ゲームをリセット</button>`}</div></details></div>`;
 }
 
 /* ---------------- actions ---------------- */

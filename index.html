@@ -163,7 +163,7 @@ h1,h2,h3{font-family:var(--f-display);font-weight:900;font-style:italic;margin:0
 .oitem .sel{display:flex;gap:3px;align-items:center;font-size:13px}
 .oitem .sel .lanebadge{font-size:13px}
 .oitem .v{font-family:var(--f-num);font-weight:800;font-style:italic;font-size:clamp(18px,1.8vw,27px);display:inline-block}
-.bfoot{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch}
+.bfoot{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:stretch}
 @media (max-width:980px){.bfoot{grid-template-columns:1fr}}
 .qr{display:flex;gap:16px;align-items:center;background:var(--carbon);color:#fff;border-top-color:var(--red)}
 .qr .code{background:#fff;padding:8px;width:136px;height:136px;display:grid;place-items:center;flex:none}
@@ -743,7 +743,9 @@ function popularity(r,O){
   const arr=r.runners.map(id=>({id, v:O.odds.win[id].v}));
   arr.sort((a,b)=>a.v-b.v); const rank={}; arr.forEach((x,i)=>rank[x.id]=i+1); return rank;
 }
-function trackFlash(O){
+function trackFlash(O, rid){
+  // レースが変わったら前回値を捨てる（前のレースの倍率と比べて色が付かないように）
+  if(S.flashRace!==rid){ S.flashRace=rid; S.prevOdds={}; S.flash={}; }
   const t=now();
   for(const m in O.odds) for(const k in O.odds[m]){
     const key=m+":"+k, v=O.odds[m][k].v, prev=S.prevOdds[key];
@@ -1153,7 +1155,7 @@ function renderBoard(){
   const r=curRace();
   if(!r) return `<div class="board wrap"><div class="checker"></div><div class="bhead">${logo()}</div>
     <div class="panel" style="text-align:center;padding:60px 16px"><h1 style="font-size:40px">まもなくスタート</h1><p class="muted">管理画面でメンバーを登録して、出走表を作ってください</p></div>${boardQR()}</div>`;
-  const tix=raceTickets(r), O=computeOdds(r,tix); trackFlash(O);
+  const tix=raceTickets(r), O=computeOdds(r,tix); trackFlash(O, r.id);
   const rank=popularity(r,O), W=O.pools.win.total, rem=remain(r), MA=marksAgg(r);
   const lanes=r.runners.map((id,i)=>{
     const o=O.odds.win[id], share=W? Math.round((O.pools.win.by[id]||0)/W*100):0;
@@ -1190,7 +1192,6 @@ function renderBoard(){
     <div class="bfoot">
       ${boardQR()}
       <div class="panel"><h2>合計 <span class="tag">TOTAL ${total}</span></h2><div class="sales">${sales}</div>${waitingHtml(r,tix)}</div>
-      <div class="panel"><h2>予選ポイント <span class="tag">STANDINGS</span></h2>${standHtml(6)}</div>
     </div>
   </div>`;
 }
@@ -1198,11 +1199,6 @@ function waitingHtml(r,tix){
   if(!isLive(r)) return "";
   const bet=new Set(tix.map(t=>t.member)); const w=active().filter(m=>!r.runners.includes(m.id)&&!bet.has(m.id));
   return `<p class="muted" style="margin:10px 0 0;font-size:14px">${w.length?`まだ賭けてない人：<b style="color:var(--ink)">${w.map(m=>esc(m.name)).join("、")}</b>`:"全員賭け終わり！"}</p>`;
-}
-function standHtml(limit){
-  const st=standings(); if(!st.length) return `<p class="muted">まだ記録がありません</p>`;
-  const n=st.length, uneven=new Set(st.map(s=>s.runs)).size>1;
-  return `<div class="stand">${st.slice(0,limit||n).map((s,i)=>`<div class="row ${i<4?"g1":(i>=n-4?"dobe":"")}"><span class="num">${i+1}</span><span>${esc(mname(s.id))} ${fire(s.id)}</span><span class="muted" style="font-size:12px">${s.runs}戦</span><b class="num">${uneven?s.avg.toFixed(2):s.pts+"pt"}</b></div>`).join("")}${limit&&n>limit?`<p class="muted" style="margin:4px 0 0;font-size:12px">ほか${n-limit}人</p>`:""}</div>`;
 }
 function boardQR(){
   return `<div class="panel qr"><div class="code" id="qrcode">${BET_URL?"":'<span style="font-size:12px;text-align:center">QR<br>準備中</span>'}</div>
@@ -1293,7 +1289,7 @@ function renderBet(){
   if(bt==="stats") return `<div class="bet" style="padding-bottom:40px">${head}${topTabs}${statsMobile()}</div>`;
   if(bt==="help") return `<div class="bet" style="padding-bottom:40px">${head}${topTabs}${helpPlayer()}</div>`;
   if(!r) return `<div class="bet">${head}${topTabs}<div class="note">レースの準備中です。出走表ができるまで待ってね。</div></div>`;
-  const tix=raceTickets(r), O=computeOdds(r,tix); trackFlash(O);
+  const tix=raceTickets(r), O=computeOdds(r,tix); trackFlash(O, r.id);
   const rem=remain(r), live=isLive(r);
   const banner=`<div class="rbanner"><div><div class="row" style="gap:6px">${typePill(r)}${statusPill(r)}</div><h2 style="margin-top:6px">${esc(raceTitle(r))}</h2></div>${r.status==="countdown"&&rem>0?`<div class="t ${rem<=10?"hot":""}" data-cd="${r.id}">${mmss(rem)}</div>`:""}</div>`;
   const mine=tix.filter(t=>t.member===me);

@@ -1575,8 +1575,8 @@ function renderAdmin(){
     <div class="topnav">${logo()}<div class="links"><a class="btn sm" href="#board" target="_self">オッズ画面</a><a class="btn sm" href="#bet">投票画面</a><a class="btn sm" href="#stats">成績表</a><a class="btn sm go" href="#adminhelp">管理者マニュアル</a></div></div>
     <div class="checker"></div>
     <div class="agrid">
-      <div class="acol">${adminRace()}${adminRaces()}${adminProxy()}${adminFinal()}${betTable()}${adminHouse()}<div class="panel"><h2>成績表 <span class="tag">RECORDS</span></h2><p class="muted" style="margin:0 0 10px">管理画面からは、名簿の全員の通算成績が見られます。</p><a class="btn go" href="#stats">全員の成績表を開く</a></div></div>
-      <div class="acol">${adminUrls()}${adminMembers()}${adminSchedule()}${adminSettings()}${adminData()}</div>
+      <div class="acol">${adminRace()}${adminRaces()}${adminProxy()}${adminFinal()}${betTable()}<div class="panel"><h2>成績表 <span class="tag">RECORDS</span></h2><p class="muted" style="margin:0 0 10px">管理画面からは、名簿の全員の通算成績が見られます。</p><a class="btn go" href="#stats">全員の成績表を開く</a></div></div>
+      <div class="acol">${adminUrls()}${adminMembers()}${adminHouse()}${adminSchedule()}${adminSettings()}${adminData()}</div>
     </div></div>`;
 }
 function adminRace(){
@@ -1672,7 +1672,7 @@ function adminSettings(){
   const v=(id,val)=>f[id]!==undefined?f[id]:val;
   const inp=(id,label,val)=>`<label for="${id}">${label}<input id="${id}" type="number" step="any" inputmode="decimal" data-bind="${id}" value="${esc(v(id,val))}"></label>`;
   const tag=k=>L[k]!=null?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">学習中</span>':'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">初期値</span>';
-  return `<div class="panel"><details><summary style="cursor:pointer;font-weight:900;font-style:italic">ルール設定（ふだんは触らなくてOK）</summary>
+  return `<div class="panel"><details><summary style="cursor:pointer;font-weight:900;font-style:italic">ルール設定</summary>
     <p class="muted" style="font-size:12px;margin:10px 0">払戻率と賞金の％だけ手で変えられます。そのほかは遊んだ記録から自動で調整します。</p>
     <div class="formgrid">
       ${MORDER.map(m=>inp("rate_"+m,`${MK[m].label} 払戻率%`,st.rates[m])).join("")}

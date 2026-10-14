@@ -648,12 +648,23 @@ function balances(){
 }
 
 /* ---------------- odds engine ---------------- */
+/* 仮の票の配り方：通算の着順ポイント（1着4〜4着1点）が高い人ほど多く。
+   出走が少ない人は平均（2.5点）に寄せ、初出走は平均扱い。仮の票の合計は変えない。 */
+function formWeights(R){
+  const ps=S.ps||pstats(), K=3, w={};
+  R.forEach(id=>{ const s=ps[id]; let pts=0, n=0;
+    if(s) s.ranks.forEach((c,i)=>{ pts+=c*(4-i); n+=c; });
+    w[id]=Math.exp((pts+2.5*K)/(n+K)-2.5); });
+  const sum=R.reduce((a,id)=>a+w[id],0);
+  R.forEach(id=>w[id]=w[id]*R.length/sum);
+  return w;
+}
 function computeOdds(r, tix){
   const st=settings(), R=r.runners, ms=marketsFor(r), pools={};
   ms.forEach(m=>pools[m]={total:0, by:{}});
   tix.forEach(t=>{ if(!pools[t.m]) return; const k=keyOf(t.m,t.sel); pools[t.m].total+=t.amt; pools[t.m].by[k]=(pools[t.m].by[k]||0)+t.amt; });
-  const v=st.virtual, W=pools.win.total, p={};
-  R.forEach(id=>p[id]=((pools.win.by[id]||0)+v)/(W+R.length*v));
+  const v=st.virtual, W=pools.win.total, p={}, fw=formWeights(R);
+  R.forEach(id=>p[id]=((pools.win.by[id]||0)+v*fw[id])/(W+R.length*v));
   const odds={win:{}};
   R.forEach(id=>{ const b=pools.win.by[id]||0; const rate=st.rates.win/100;
     odds.win[id] = b>0 ? {v:Math.max(1,fl(W*rate/b)), sel:[id], pop:b} : {v:Math.max(1,fl(rate/p[id])), sel:[id], pop:0, est:true}; });
@@ -920,7 +931,7 @@ function helpPlayer(){
     <tr><td><b>連複</b></td><td>1・2着の2人（順不同）</td><td>すべて</td><td class="r">${settings().caps.qu||"なし"}${settings().caps.qu?"枚":""}</td></tr>
     <tr><td><b>3連複</b></td><td>1〜3着の3人（順不同）＝ドベ当て</td><td>すべて</td><td class="r">${settings().caps.tri||"なし"}${settings().caps.tri?"枚":""}</td></tr>
     <tr><td><b>3連単</b></td><td>1→2→3着を順番どおり</td><td>決勝のみ</td><td class="r">${settings().caps.t3||"なし"}${settings().caps.t3?"枚":""}</td></tr></table></div>
-    <ul class="mlist"><li>倍率（オッズ）はみんなの賭け方で締切まで動きます。人気が集まる人ほど下がります。</li><li>払い戻しは「賭けた枚数 × 倍率」。1枚未満は切り捨てです。</li><li>予想の印（◎本命・○対抗・▲単穴）も付けられます。チップは使いません。大画面に「みんなの本命」が出ます。</li></ul>
+    <ul class="mlist"><li>倍率（オッズ）はみんなの賭け方で締切まで動きます。人気が集まる人ほど下がります。</li><li>誰も賭けていない人の倍率には「参考」と付きます。これまでの成績から出した予想の倍率で、強い人ほど低くなります。</li><li>払い戻しは「賭けた枚数 × 倍率」。1枚未満は切り捨てです。</li><li>予想の印（◎本命・○対抗・▲単穴）も付けられます。チップは使いません。大画面に「みんなの本命」が出ます。</li></ul>
     ${mImg("p_marks.jpg","予想の印の入力欄。行ごとに選手の番号をタップ")}`)}</div>
   <div id="m-bet">${mSec("投票のしかた","HOW TO BET",`
     <p>「受付中」のあいだに「投票」タブから買います。締切のあとは買えません。</p>

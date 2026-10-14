@@ -936,7 +936,6 @@ function phoneCelebrate(r){
   markSeen("cel:"+r.id);
   const s=r.settle, pay=s.hits.filter(x=>x.member===me).reduce((a,x)=>a+x.pay,0), prize=s.prizes[me]||0;
   if(pay+prize>0){ const champ=r.type==="g1"&&s.order[0]===me; S.cel={rid:r.id, kind:"win", pay, prize, title: champ?"GRAND PRIX WINNER":pay?"YOU WIN":"PRIZE", head: champ?"G1優勝！":pay?"的中！":"賞金ゲット！"}; play("jackpot"); }
-  else if(r.type==="dobe" && s.order[s.order.length-1]===me){ S.cel={rid:r.id, kind:"dobe"}; play("sad"); }
   else { const lost=raceTickets(r).filter(t=>t.member===me).reduce((a,t)=>a+t.amt,0); if(!lost) return; S.cel={rid:r.id, kind:"lose", lost}; play("sad"); }
   clearTimeout(phoneCelebrate._t); phoneCelebrate._t=setTimeout(()=>{ S.cel=null; render(); },8000);
   render();
@@ -962,7 +961,6 @@ function sfxWatch(){
 function celHtml(){
   const c=S.cel; if(!c) return "";
   if(c.kind==="lose") return `<div class="overlay ov-lose" data-act="celClose"><div class="inner"><div class="gp-top">YOU LOSE</div><div class="stamp">LOSE</div><div class="bigwin">−${c.lost}</div><p class="sub2">はずれ… 次のレースで取り返そう！</p><p class="cel-close">タップで閉じる</p></div></div>`;
-  if(c.kind==="dobe") return `<div class="overlay ov-dobe" data-act="celClose"><div class="inner"><div class="gp-top">LAST PLACE</div><div class="stamp">ドベ確定…</div><p class="sub2">次は頑張ろう</p><p class="cel-close">タップで閉じる</p></div></div>`;
   const coins=confetti(50).replace(/class="cf"/g,'class="cf coinf"');
   return `<div class="overlay ov-win" data-act="celClose">${coins}${confetti(30)}<div class="inner"><div class="gp-top">${c.title}</div><div class="stamp">${c.head}</div><div class="bigwin">+${c.pay+c.prize}</div><p class="sub2">${c.pay+c.prize}枚${c.prize&&c.pay?`（賞金${c.prize}枚込み）`:""}</p><p class="cel-close">タップで閉じる</p></div></div>`;
 }

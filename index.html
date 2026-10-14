@@ -451,6 +451,11 @@ body[data-race="dobe"] .qr .code{background:#fff}
 .pbig span{font-weight:900;font-style:italic;font-size:15px}
 .nextup{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--yellow);color:#18181d;font-weight:900;font-style:italic}
 .nextup b{font-family:var(--f-num);font-size:30px;line-height:1}
+.ov-lose{background:repeating-linear-gradient(135deg,#1d2230f7 0 22px,#262c3cf7 22px 44px);cursor:pointer}
+.ov-lose .stamp{color:#9fb1d6;text-shadow:5px 5px 0 #0b0e16;animation:slam .45s cubic-bezier(.2,1.5,.4,1)}
+.ov-lose .gp-top{color:#7f8aa3}
+.ov-lose .bigwin{color:#c9d3ea;text-shadow:4px 4px 0 #0b0e16}
+.ov-lose .cel-close{color:#7f8aa3}
 .ov-win{background:repeating-conic-gradient(from 0deg at 50% 40%,#ffcc00f7 0 10deg,#ffb000f7 10deg 20deg);cursor:pointer}
 .ov-win .stamp{color:#fff;text-shadow:6px 6px 0 #18181d}
 .ov-win .gp-top{color:#18181d}
@@ -932,7 +937,7 @@ function phoneCelebrate(r){
   const s=r.settle, pay=s.hits.filter(x=>x.member===me).reduce((a,x)=>a+x.pay,0), prize=s.prizes[me]||0;
   if(pay+prize>0){ const champ=r.type==="g1"&&s.order[0]===me; S.cel={rid:r.id, kind:"win", pay, prize, title: champ?"GRAND PRIX WINNER":pay?"YOU WIN":"PRIZE", head: champ?"G1優勝！":pay?"的中！":"賞金ゲット！"}; play("jackpot"); }
   else if(r.type==="dobe" && s.order[s.order.length-1]===me){ S.cel={rid:r.id, kind:"dobe"}; play("sad"); }
-  else return;
+  else { const lost=raceTickets(r).filter(t=>t.member===me).reduce((a,t)=>a+t.amt,0); if(!lost) return; S.cel={rid:r.id, kind:"lose", lost}; play("sad"); }
   clearTimeout(phoneCelebrate._t); phoneCelebrate._t=setTimeout(()=>{ S.cel=null; render(); },8000);
   render();
 }
@@ -956,6 +961,7 @@ function sfxWatch(){
 }
 function celHtml(){
   const c=S.cel; if(!c) return "";
+  if(c.kind==="lose") return `<div class="overlay ov-lose" data-act="celClose"><div class="inner"><div class="gp-top">YOU LOSE</div><div class="stamp">LOSE</div><div class="bigwin">−${c.lost}</div><p class="sub2">はずれ… 次のレースで取り返そう！</p><p class="cel-close">タップで閉じる</p></div></div>`;
   if(c.kind==="dobe") return `<div class="overlay ov-dobe" data-act="celClose"><div class="inner"><div class="gp-top">LAST PLACE</div><div class="stamp">ドベ確定…</div><p class="sub2">次は頑張ろう</p><p class="cel-close">タップで閉じる</p></div></div>`;
   const coins=confetti(50).replace(/class="cf"/g,'class="cf coinf"');
   return `<div class="overlay ov-win" data-act="celClose">${coins}${confetti(30)}<div class="inner"><div class="gp-top">${c.title}</div><div class="stamp">${c.head}</div><div class="bigwin">+${c.pay+c.prize}</div><p class="sub2">${c.pay+c.prize}枚${c.prize&&c.pay?`（賞金${c.prize}枚込み）`:""}</p><p class="cel-close">タップで閉じる</p></div></div>`;
@@ -1007,7 +1013,7 @@ function helpPlayer(){
     ${mImg("b_open.jpg","受付中の大画面。左に単勝オッズ、右に連単・連複・3連複のオッズ")}
     ${mImg("b_closed.jpg","締切のあと。誰がどの馬券を何枚買ったかが公開される")}
     ${mImg("b_result.jpg","結果発表。表彰台、払戻の倍率、当てた人")}
-    ${mImg("p_result.jpg","左：締切後のスマホ。右：当たると「的中！」画面（タップで閉じる）")}
+    ${mImg("p_result.jpg","左：締切後のスマホ。右：当たると「的中！」画面（タップで閉じる）")}<p>外れたときは「LOSE」画面が出て、そのレースで賭けた枚数が表示されます。馬券を買っていないレースでは何も出ません。</p>
     ${mImg("p_final.jpg","左：本日の最終ポイント。右：成績表タブ")}
     <ul class="mlist"><li>全レースが終わると「本日の最終ポイント」が出ます。配られた枚数からどれだけ増えたか、何位かがわかります。</li><li>「成績表」タブで、今日と通算の着順・勝率・収支が見られます。</li></ul>`)}</div>
   <div id="m-faq">${mSec("困ったとき","FAQ",`

@@ -26,7 +26,7 @@
   }catch(e){ console.error(e); fs = null; }
 
   function snap(s){ return { id: s.id, exists: !!s.exists, data: function(){ return s.data(); }, metadata: s.metadata || {} }; }
-  function err(e){ return function(x){ console.error(x); if(e) e({ code: "unavailable", message: String(x && x.message || x) }); }; }
+  function err(e){ return function(x){ console.error(x); if(e) e({ code: x && x.code || "unavailable", message: String(x && x.message || x) }); }; }
   function wrapDoc(r){
     return {
       id: r.id, path: r.path,
@@ -44,7 +44,26 @@
       onSnapshot: function(n, e){ return c.onSnapshot(function(q){ var d = q.docs.map(snap); n({ docs: d, size: d.length, empty: !d.length }); }, err(e)); }
     };
   }
-  var db = fs ? { doc: function(p){ return wrapDoc(fs.doc(p)); }, collection: function(p){ return wrapCol(fs.collection(p)); } } : null;
+  var db = fs ? {
+    doc: function(p){ return wrapDoc(fs.doc(p)); },
+    collection: function(p){ return wrapCol(fs.collection(p)); },
+    // 読み直したデータで更新し、競合時は Firestore に再試行させる。
+    // fn は再実行されることがあるので、画面更新などの副作用を入れない。
+    transact: function(paths, fn){
+      return fs.runTransaction(async function(tx){
+        var refs = paths.map(function(p){ return fs.doc(p); });
+        var snapshots = await Promise.all(refs.map(function(r){ return tx.get(r); }));
+        var docs = {};
+        snapshots.forEach(function(s, i){ docs[paths[i]] = s.exists ? s.data() : null; });
+        var next = fn(docs);
+        Object.keys(next).forEach(function(p){
+          if(!paths.includes(p)) throw new Error("Transaction attempted an unread document: " + p);
+          tx.set(fs.doc(p), next[p]);
+        });
+        return next;
+      });
+    }
+  } : null;
 
   var user = {
     id: function(){ return Promise.resolve(dev); },

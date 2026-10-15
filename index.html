@@ -574,6 +574,31 @@ body[data-race="dobe"] .qr .code{background:#fff}
 .selfbet .row .num{font-size:36px}
 
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.confetti{display:none}}
+/* 元の管理画面に、進行別の切り替えだけを追加する。 */
+.admin-phases{display:flex;gap:10px;margin:2px 0 4px}
+.admin-phases>button{flex:1;min-width:0;text-align:left;background:var(--paper);border:1px solid var(--line);padding:12px 16px;display:grid;grid-template-columns:auto 1fr;gap:3px 10px;align-items:center}
+.admin-phases>button>span{grid-row:span 2;font-family:var(--f-num);font-style:italic;font-size:25px;color:#a2a2aa}
+.admin-phases b{font-size:17px;font-style:italic}
+.admin-phases small{font-size:11px;color:var(--muted);font-weight:500}
+.admin-phases>button.active{border:2px solid var(--red);background:#fff5f3}
+.admin-phases>button.active>span{color:var(--red)}
+.admin-extra{background:var(--paper);border:1px solid var(--line)}
+.admin-extra>summary{padding:15px 16px;font-size:13px;font-weight:700;cursor:pointer}
+.admin-extra>div{padding:12px}
+.admin-extra>div>.panel{box-shadow:none}
+.admin-audience-count{display:flex;align-items:baseline;gap:10px;margin:6px 0 14px}
+.admin-audience-count>b{font-size:34px;font-family:var(--f-num)}
+.admin-audience-count small{font-size:19px;color:var(--muted)}
+.admin-audience-count>span{font-size:12px;color:var(--muted)}
+.admin-audience-person{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 0;border-top:1px solid var(--line)}
+.admin-audience-person>span{font-size:11px;font-weight:700;color:var(--muted)}
+.admin-audience-person>.received{color:var(--green)}
+.admin-stage-hint{border-left:4px solid var(--red)}
+.admin-stage-hint h3{font-size:18px;margin:8px 0}
+.admin-stage-hint p{font-size:12px;line-height:1.8;color:var(--muted);margin:0}
+.admin-newday p{font-size:13px;line-height:1.8}
+.admin-newday .btn{margin:8px 6px 0 0}
+@media(max-width:700px){.admin-phases{gap:6px}.admin-phases>button{padding:10px 7px;gap:3px 6px}.admin-phases>button>span{font-size:19px}.admin-phases b{font-size:14px}.admin-phases small{display:none}}
 </style>
 
 <div id="app"></div>
@@ -667,6 +692,12 @@ function learnedTuneCalc(st, exRid){
 
 /* ---------------- utils ---------------- */
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function sameData(a,b){
+  if(a===b) return true;
+  if(!a||!b||typeof a!=="object"||typeof b!=="object"||Array.isArray(a)!==Array.isArray(b)) return false;
+  const keys=Object.keys(a);
+  return keys.length===Object.keys(b).length && keys.every(k=>Object.hasOwn(b,k)&&sameData(a[k],b[k]));
+}
 function deepMerge(a,b){ for(const k in b){ if(b[k]&&typeof b[k]==="object"&&!Array.isArray(b[k])&&a[k]&&typeof a[k]==="object"&&!Array.isArray(a[k])) deepMerge(a[k],b[k]); else a[k]=b[k]; } return a; }
 function rid(){ return Math.random().toString(36).slice(2,10); }
 function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -971,26 +1002,96 @@ function makeSchedule(ids, tgt){
   return best;
 }
 
-/* ---------------- db writes (one at a time per doc) ---------------- */
-const queues={};
-function enqueue(path, fn){
-  const p=(queues[path]||Promise.resolve()).then(fn).catch(e=>{ console.error(e); toast(e&&e.code==="invalid_argument" ? "書き込みできませんでした（権限を確認してね）" : "通信エラー。もう一度試してね"); });
-  queues[path]=p; return p;
+/* ---------------- db writes ---------------- */
+// この端末の書き込みは直列化し、他端末との競合は Firestore の transaction で扱う。
+let writeQueue=Promise.resolve();
+function writeError(message){ const e=new Error(message); e.userMessage=message; return e; }
+function enqueue(fn){
+  const p=writeQueue.then(fn).then(()=>true).catch(e=>{
+    console.error(e);
+    toast(e.userMessage || (e.code==="permission-denied" ? "保存する権限がありません。管理者に確認してください" : "保存できませんでした。通信を確認してもう一度試してください"));
+    return false;
+  });
+  writeQueue=p; return p;
 }
-function mutateState(fn){
-  return enqueue("game/state", async()=>{ const next=clone(S.state||defaultState()); fn(next); S.state=next; render(); await S.db.doc("game/state").set(next); });
+function applyDocuments(docs){
+  for(const [path,data] of Object.entries(docs)){
+    if(path.startsWith("bets/")) S.bets[path.slice(5)]=data;
+    else S[path.slice(5)]=data;
+  }
+  render();
 }
-function mutateLedger(fn){
-  return enqueue("game/ledger", async()=>{ const next=clone(S.ledger||{entries:[]}); fn(next); S.ledger=next; render(); await S.db.doc("game/ledger").set(next); });
+function mutateDocuments(paths, fn){
+  return enqueue(async()=>{
+    if(!S.db || !S.db.transact) throw writeError("安全な保存機能を利用できません。ページを再読み込みしてください");
+    const next=await S.db.transact(paths,fn);
+    // 保存に成功するまで、画面上の残高や結果を確定させない。
+    applyDocuments(next);
+  });
 }
-function mutateRoster(fn){
-  return enqueue("game/roster", async()=>{ const next=clone(S.roster||{players:[]}); next.players=next.players||[]; fn(next); S.roster=next; render(); await S.db.doc("game/roster").set(next); });
+function mutateDocument(path, fallback, fn){
+  return mutateDocuments([path],docs=>{
+    const next=clone(docs[path] || fallback()); fn(next);
+    return {[path]:next};
+  });
 }
-function mutateHistory(fn){
-  return enqueue("game/history", async()=>{ const next=clone(S.history||{races:[]}); next.races=next.races||[]; fn(next); S.history=next; render(); await S.db.doc("game/history").set(next); });
+function mutateState(fn){ return mutateDocument("game/state",defaultState,fn); }
+// 進行操作が待機中に別の操作が走っても、元のレースだけを更新する。
+function mutateCurrentRace(fn){
+  const current=curRace(), gid=S.state&&S.state.gameId;
+  if(!S.isOwner||!current) return Promise.resolve(false);
+  const expected=clone(current);
+  return mutateState(state=>{
+    const race=state.races[state.cur];
+    if(state.gameId!==gid||!race||!sameData(race,expected)) throw writeError("レースが更新されました。最新の状態を確認してください");
+    fn(state,race);
+  });
 }
-function mutateBets(docId, fn){
-  return enqueue("bets/"+docId, async()=>{ const next=clone(S.bets[docId]||{tickets:[]}); fn(next); S.bets[docId]=next; render(); await S.db.doc("bets/"+docId).set(next); });
+function mutateLedger(fn){ return mutateDocument("game/ledger",()=>({entries:[]}),fn); }
+function mutateRoster(fn){ return mutateDocument("game/roster",()=>({players:[]}),fn); }
+function mutateHistory(fn){ return mutateDocument("game/history",()=>({races:[]}),fn); }
+function mutateBets(docId, fn){ return mutateDocument("bets/"+docId,()=>({tickets:[]}),fn); }
+
+// 送信中の再操作を防ぎ、成功通知はサーバーで確定した後に出す。
+async function ticketAction(fn, onSuccess){
+  if(S.ui.ticketPending) return false;
+  S.ui.ticketPending=true; render();
+  try{
+    const ok=await fn();
+    if(ok) onSuccess();
+    return ok;
+  }finally{ S.ui.ticketPending=false; render(); }
+}
+async function adminTask(key,fn,onSuccess){
+  const pending=S.ui.pendingAdmin=S.ui.pendingAdmin||{};
+  if(pending[key]) return false;
+  pending[key]=true; render();
+  try{ const ok=await fn(); if(ok) onSuccess(); return ok; }
+  finally{ delete pending[key]; render(); }
+}
+function saveTicket(docId, ticket, self){
+  const path="bets/"+docId;
+  return mutateDocuments(["game/state",path],docs=>{
+    const state=docs["game/state"], r=state&&state.races[state.cur];
+    if(!r || r.id!==ticket.race || !isLive(r)) throw writeError("受付は終了しました。最新のレースを確認してください");
+    if(!Number.isSafeInteger(ticket.amt) || ticket.amt<unit() || ticket.amt%unit()) throw writeError(`${unit()}枚単位で賭けてね`);
+    if(!MK[ticket.m] || !marketsFor(r).includes(ticket.m) || ticket.sel.length!==MK[ticket.m].n || new Set(ticket.sel).size!==ticket.sel.length || ticket.sel.some(id=>!r.runners.includes(id))) throw writeError("買い目を選び直してください");
+    if(!state.members.some(m=>m.id===ticket.member&&!m.left)) throw writeError("参加者を選び直してください");
+    const runner=r.runners.includes(ticket.member);
+    if(runner && !(ticket.m==="win" && ticket.sel[0]===ticket.member)) throw writeError("出走中は自分への単勝だけ購入できます");
+    const next=clone(docs[path]||{tickets:[]});
+    // 同じ投票文書を別端末が更新していた場合も、最新の票で再判定する。
+    const previous=S.bets[docId]; S.bets[docId]=next;
+    try{
+      if((balances()[ticket.member]||0)<ticket.amt) throw writeError("チップが足りません");
+      const st=settings(), cap=(self||runner)?st.caps.self:st.caps[ticket.m];
+      const used=raceTickets(r).filter(t=>t.member===ticket.member&&t.m===ticket.m).reduce((a,t)=>a+t.amt,0);
+      if(cap && used+ticket.amt>cap) throw writeError(`${MK[ticket.m].label}は1レース${cap}枚までです`);
+    }finally{ if(previous===undefined) delete S.bets[docId]; else S.bets[docId]=previous; }
+    if(docId!=="proxy") next.member=ticket.member;
+    (next.tickets=next.tickets||[]).push({...ticket,t:now()});
+    return {[path]:next};
+  });
 }
 
 /* ---------------- graphics ---------------- */
@@ -1282,8 +1383,11 @@ function render(){
   else if(md==="adminhelp") html=renderAdminHelp();
   else html=renderAdmin();
   app.innerHTML=html;
+  document.querySelectorAll('.admin [data-pending-key]').forEach(el=>{ if((S.ui.pendingAdmin||{})[el.dataset.pendingKey]) el.disabled=true; });
+  if(S.ui.ending) document.querySelectorAll('[data-act="endGame"]').forEach(el=>{ el.disabled=true; el.textContent="保存中…"; });
+  if(S.ui.ticketPending) document.querySelectorAll('[data-act="bet"], [data-act="betSelf"], [data-act="pbet"], [data-act="cancelT"]').forEach(el=>{ el.disabled=true; });
   if(md==="admin"){ const seen={}; document.querySelectorAll("#app .admin .panel > h2").forEach(h=>{ const t=(h.childNodes[0]&&h.childNodes[0].textContent||"").trim(); if(!t) return; seen[t]=(seen[t]||0)+1; const k=seen[t]>1?t+seen[t]:t;
-    h.dataset.act="foldPanel"; h.dataset.k=k; h.classList.add("foldh"); h.setAttribute("role","button"); h.tabIndex=0;
+    h.dataset.act="foldPanel"; h.dataset.k=k; h.classList.add("foldh"); h.setAttribute("role","button"); h.setAttribute("aria-expanded",String(!(S.ui.foldH||{})[k])); h.tabIndex=0;
     if((S.ui.foldH||{})[k]) h.parentElement.classList.add("folded"); }); }
   const cr=S.ready&&S.state&&!S.noDb?curRace():null;
   document.body.dataset.race = (md==="board"||md==="bet")&&cr ? cr.type : "";
@@ -1637,20 +1741,37 @@ function renderStats(){
 }
 
 /* ===== ADMIN ===== */
+function adminPhase(){
+  return ["prep","live","finish"].includes(S.ui.adminPhase)?S.ui.adminPhase:S.state.ended?"finish":races().length?"live":"prep";
+}
+function adminDisclosure(key,title,content){
+  return `<details class="admin-extra" data-fold="${key}" ${foldOpen(key)}><summary>${title}</summary><div>${content}</div></details>`;
+}
+function adminAudience(){
+  const r=curRace(), viewers=active().filter(m=>!r||!r.runners.includes(m.id)), purchased=new Set(raceTickets(r).map(t=>t.member));
+  const count=viewers.filter(m=>purchased.has(m.id)).length;
+  return `<div class="panel"><h2>投票状況 <span class="tag">LIVE</span></h2><div class="admin-audience-count"><b>${count}<small> / ${viewers.length}人</small></b><span>投票済み</span></div>${viewers.map(m=>`<div class="admin-audience-person"><b>${esc(m.name)}</b><span class="${purchased.has(m.id)?"received":""}">${purchased.has(m.id)?"✓ 投票済み":r&&!isLive(r)?"未投票":"投票を待っています"}</span></div>`).join("")}<p class="muted" style="font-size:12px;margin:12px 0 0">出走中のメンバーは含みません。</p></div>`;
+}
 function renderAdmin(){
   if(!S.isOwner) return window.MK_WEB ? `<div class="bet">${logo()}<div class="panel"><h2>管理画面 <span class="tag">ADMIN</span></h2><p class="muted" style="margin:0 0 10px">暗証番号を入れてください。この端末では次回から入力不要になります。</p><div class="row"><input id="adminPin" data-bind="adminPin" type="password" inputmode="numeric" placeholder="暗証番号" value="${esc(S.ui.form.adminPin||"")}" style="flex:1"><button class="btn go" data-act="pin">開く</button></div></div><a class="btn" href="#">戻る</a></div>` : `<div class="bet">${logo()}<div class="warn">管理画面はこのページのオーナーだけが使えます。</div><a class="btn" href="#">戻る</a></div>`;
-  const st=S.state||defaultState();
-  return `<div class="admin wrap">
-    <div class="topnav">${logo()}<div class="links"><a class="btn sm" href="#board" target="_self">オッズ画面</a><a class="btn sm" href="#bet">投票画面</a><a class="btn sm" href="#stats">成績表</a><a class="btn sm go" href="#adminhelp">管理者マニュアル</a></div></div>
-    <div class="checker"></div>
-    <div class="agrid">
-      <div class="acol">${adminRace()}${adminRaces()}${adminProxy()}${adminFinal()}${betTable()}</div>
-      <div class="acol">${adminUrls()}${adminMembers()}${adminHouse()}${adminSchedule()}${adminSettings()}<div class="panel"><details data-fold="records" ${foldOpen("records")}><summary class="foldsum">成績表 <span class="tag">RECORDS</span></summary><p class="muted" style="margin:0 0 10px">管理画面からは、名簿の全員の通算成績が見られます。</p><a class="btn go" href="#stats">全員の成績表を開く</a></details></div>${adminData()}</div>
-    </div>${endPopHtml()}</div>`;
+  const phase=adminPhase(), r=curRace();
+  const phases=[["prep","01","準備","参加者・チップ・出走表"],["live","02","開催中","締切・着順・レース進行"],["finish","03","終了後","成績・収支・データ保存"]];
+  let content;
+  if(phase==="prep"){
+    const schedule=adminSchedule()||`<div class="panel"><h2>出走表 <span class="tag">SCHEDULE</span></h2><p class="muted">${S.state.ended?"開催は終了しています。「終了後」から次の開催を準備できます。":"出走表は作成済みです。「開催中」からレースを進めてください。"}</p></div>`;
+    content=`<div class="agrid"><div class="acol">${adminMembers()}${adminUrls()}</div><div class="acol">${schedule}${adminSettings()}</div></div>`;
+  }else if(phase==="live"){
+    const hint=!r?"出走表を作成してください":r.status==="done"?"次のレースへ進みましょう":r.status==="closed"?"レース終了後、着順を入力":r.status==="countdown"?"締切まで、投票を待ちましょう":"投票が集まったら、締切を開始";
+    content=`<div class="agrid"><div class="acol">${adminRace()}${adminRaces()}${adminProxy()}</div><div class="acol">${adminAudience()}<div class="panel admin-stage-hint"><span class="muted" style="font-size:12px">次の操作</span><h3>${hint}</h3><p>${r&&r.status==="closed"?"1着から順に選んで確定します。最後の1人は自動で補完します。":"進行に合わせて操作が切り替わります。"}</p></div>${adminDisclosure("players","チップ調整・参加者の変更",adminMembers())}${adminDisclosure("links","参加用URL・画面リンク",adminUrls())}</div></div>`;
+  }else{
+    const nextDay=S.state.ended?`<div class="panel admin-newday"><h2>次の開催を準備</h2><p class="muted">今日の参加者・チップ・出走表を初期化します。名簿と通算成績は残ります。</p>${S.ui.confirm==="newday"?`<p class="warn">必要なCSVは保存しましたか？ 当日のデータを初期化します。</p><button class="btn go" data-act="endClose">初期化して準備へ</button><button class="btn" data-act="cancelConfirm">やめる</button>`:`<button class="btn" data-act="askNewDay">次の開催を準備する</button>`}</div>`:"";
+    content=`<div class="agrid"><div class="acol">${adminFinal()}${betTable()}<a class="btn" href="#stats">全員の通算成績を開く</a></div><div class="acol">${adminData(true)}${adminHouse()}${nextDay}</div></div>`;
+  }
+  return `<div class="admin wrap"><div class="topnav">${logo()}<div class="links"><a class="btn sm" href="#board">オッズ画面</a><a class="btn sm" href="#bet">投票画面</a><a class="btn sm" href="#stats">成績表</a><a class="btn sm go" href="#adminhelp">管理者マニュアル</a></div></div><div class="checker"></div><nav class="admin-phases" aria-label="大会の進行">${phases.map(([key,num,title,description])=>`<button class="${key===phase?"active":""}" data-act="adminPhase" data-phase="${key}" aria-current="${key===phase?"page":"false"}"><span>${num}</span><b>${title}</b><small>${description}</small></button>`).join("")}</nav>${content}${endPopHtml()}</div>`;
 }
 function adminRace(){
   const r=curRace();
-  if(!r) return `<div class="panel"><h2>レース進行 <span class="tag">RACE CONTROL</span></h2><p class="muted">右の「メンバー」で全員を登録して、「出走表」を作るとスタートできます。</p></div>`;
+  if(!r) return `<div class="panel"><h2>レース進行 <span class="tag">RACE CONTROL</span></h2><p class="muted">「準備」でメンバーを登録し、出走表を作るとスタートできます。</p></div>`;
   const tix=raceTickets(r), O=computeOdds(r,tix), rem=remain(r), total=tix.reduce((a,t)=>a+t.amt,0);
   let ctrl="";
   if(r.status==="open") ctrl=`<button class="btn go" data-act="countdown">締切カウントダウン（${settings().countdown}秒）</button><button class="btn red" data-act="closeNow">即締切</button>`;
@@ -1664,7 +1785,7 @@ function adminRace(){
     const nextIdx=S.state.cur+1, hasNext=nextIdx<races().length;
     const RR=roundRaces(), prelimDone=RR.filter(x=>x.type==="prelim").every(x=>x.status==="done"), hasFinals=RR.some(x=>x.type!=="prelim");
     ctrl = hasNext ? `<button class="btn go" data-act="nextRace">次のレースへ（${esc(raceTitle(races()[nextIdx]))}）</button>`
-      : (!hasFinals&&prelimDone&&(finalsOn().g1||finalsOn().dobe) ? `<button class="btn go" data-act="makeFinals">決勝を組む（${[finalsOn().g1?"上位4人→G1":"",finalsOn().dobe?"下位4人→D1":""].filter(Boolean).join("・")}）</button>` : (S.state.newRound ? `<span class="pill st-done">第${curRound()}大会 終了！</span><span class="muted">右の「出走表」で次の大会のレース数を選んでスタートしてください</span>` : `<span class="pill st-done">第${curRound()}大会 終了！</span><button class="btn go" data-act="newRound">次の大会を始める</button>`));
+      : (!hasFinals&&prelimDone&&(finalsOn().g1||finalsOn().dobe) ? `<button class="btn go" data-act="makeFinals">決勝を組む（${[finalsOn().g1?"上位4人→G1":"",finalsOn().dobe?"下位4人→D1":""].filter(Boolean).join("・")}）</button>` : (S.state.newRound ? `<span class="pill st-done">第${curRound()}大会 終了！</span><span class="muted">「準備」の出走表で次の大会のレース数を選んでスタートしてください</span>` : `<span class="pill st-done">第${curRound()}大会 終了！</span><button class="btn go" data-act="newRound">次の大会を始める</button>`));
     ctrl+=`<button class="btn sm ghost" data-act="undoResult">結果を取り消す</button>`;
     const s=r.settle;
     ctrl+=`<div style="width:100%" class="muted">結果：${s.order.map(id=>esc(mname(id))).join(" › ")}　合計 ${s.sales}枚・的中 ${s.hits.length}件・賞金 ${Object.values(s.prizes).reduce((a,b)=>a+b,0)}枚</div>`;
@@ -1711,8 +1832,8 @@ function adminMembers(){
     ${!started||S.ui.showJoin?rosterHtml():""}
     ${!started||S.ui.showJoin?`<div class="row" style="margin-bottom:10px"><input id="newName" data-bind="newName" placeholder="名前を入力" value="${esc(S.ui.form.newName||"")}" style="flex:1"><button class="btn go" data-act="addMember">${started?"途中参加":"追加"}</button></div>`:""}
     <div class="scroll"><table class="tbl"><tr><th>名前</th><th class="r">残高</th><th>チップを配る・減らす</th><th></th></tr>
-    ${members().map(m=>`<tr style="${m.left?"opacity:.45":""}"><td>${S.ui.editName===m.id?`<span class="row" style="gap:4px"><input id="rename_${m.id}" class="mini" style="width:100%;min-width:90px" data-bind="rename_${m.id}" value="${esc(S.ui.form["rename_"+m.id]??m.name)}" aria-label="新しい名前"><button class="btn sm go" data-act="renameSave" data-id="${m.id}">保存</button><button class="btn sm ghost" data-act="renameCancel">やめる</button></span>`:`<button class="nameedit" data-act="renameStart" data-id="${m.id}" title="押すと名前を直せます">${esc(m.name)}</button>`} ${m.left?'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">離脱</span>':""}${m.noRace?'<span class="pill st-wait" style="font-size:10px;padding:1px 14px 1px 6px">走らない</span>':""}${connected.has(m.id)?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">スマホ接続</span>':""}</td><td class="r"><span class="num" style="font-size:18px">${bal[m.id]||0}</span></td>
-      <td><div class="row" style="gap:4px;flex-wrap:nowrap"><input id="send_${m.id}" class="mini" type="number" min="1" inputmode="numeric" placeholder="枚" data-bind="send_${m.id}" value="${esc(S.ui.form["send_"+m.id]||"")}"><button class="btn sm blue" data-act="send" data-id="${m.id}" data-sign="1">配る</button><button class="btn sm go" data-act="send" data-id="${m.id}" data-sign="-1">減らす</button></div></td>
+    ${members().map(m=>`<tr style="${m.left?"opacity:.45":""}"><td>${S.ui.editName===m.id?`<span class="row" style="gap:4px"><input id="rename_${m.id}" class="mini" style="width:100%;min-width:90px" data-bind="rename_${m.id}" value="${esc(S.ui.form["rename_"+m.id]??m.name)}" aria-label="新しい名前"><button class="btn sm go" data-act="renameSave" data-id="${m.id}">保存</button><button class="btn sm ghost" data-act="renameCancel">やめる</button></span>`:`<button class="nameedit" data-act="renameStart" data-id="${m.id}" title="押すと名前を直せます">${esc(m.name)}</button>`} ${m.left?'<span class="pill st-wait" style="font-size:10px;padding:1px 6px">離脱</span>':""}${m.noRace?'<span class="pill st-wait" style="font-size:10px;padding:1px 14px 1px 6px">走らない</span>':""}${connected.has(m.id)?'<span class="pill st-open" style="font-size:10px;padding:1px 6px">端末登録済み</span>':""}</td><td class="r"><span class="num" style="font-size:18px">${bal[m.id]||0}</span></td>
+      <td><div class="row" style="gap:4px;flex-wrap:nowrap"><input id="send_${m.id}" class="mini" type="number" min="1" inputmode="numeric" placeholder="枚" data-bind="send_${m.id}" value="${esc(S.ui.form["send_"+m.id]||"")}"><button class="btn sm blue" data-act="send" data-pending-key="send:${m.id}" data-id="${m.id}" data-sign="1">配る</button><button class="btn sm go" data-act="send" data-pending-key="send:${m.id}" data-id="${m.id}" data-sign="-1">減らす</button></div></td>
       <td style="white-space:nowrap"><button class="btn sm ${m.noRace?"go":"ghost"}" data-act="toggleRace" data-id="${m.id}" aria-pressed="${!!m.noRace}" title="${m.noRace?"押すとレースに出られるように戻します":"押すとこの人をレースに入れません"}">出走×</button> ${!started?`<button class="btn sm ghost" data-act="delMember" data-id="${m.id}">削除</button>`:m.left?`<button class="btn sm" data-act="rejoin" data-id="${m.id}">復帰</button>`:`<button class="btn sm red" data-act="leave" data-id="${m.id}">離脱</button>`}</td></tr>`).join("")}
     </table></div>
     <p class="muted" style="font-size:12px;margin:8px 0 0">最初に一人ずつ枚数を入れて「配る」。精算や没収は「減らす」。どちらも下の履歴に残ります。</p>
@@ -1749,7 +1870,7 @@ function adminSettings(){
       ${inp("pz_g1_0","G1 1着賞金%",st.prizes.g1[0])}${inp("pz_g1_1","G1 2着賞金%",st.prizes.g1[1])}
       ${inp("pz_dobe_0","D決定戦 1着賞金%",st.prizes.dobe[0])}
     </div>
-    <div class="row" style="margin-top:12px"><button class="btn go" data-act="saveSettings">設定を保存</button></div>
+    <div class="row" style="margin-top:12px"><button class="btn go" data-act="saveSettings" data-pending-key="settings">設定を保存</button></div>
     <h3 style="font-size:14px;margin:16px 0 6px">自動で調整しているもの（いまの値）</h3>
     <div class="scroll"><table class="tbl"><tr><th>項目</th><th class="r">いまの値</th><th>決め方</th></tr>
       <tr><td>見せ金（1買い目）${tag("seed")}</td><td class="r">連単${st.seed.ex}・連複${st.seed.qu}・3連複${st.seed.tri}・3連単${st.seed.t3}</td><td class="muted" style="font-size:12px">合計が直近の合計の2倍くらいになるように</td></tr>
@@ -1762,30 +1883,33 @@ function adminSettings(){
   </details></div>`;
 }
 function adminUrls(){
-  const list=[["投票用（みんなに配る）","#bet","スマホで開いて名前を選ぶだけ。成績表タブもここにあります"],["大画面用（オッズ画面）","#board","テレビやモニターにつないだPCで全画面表示"],["管理用（あなた専用）","#admin","オーナー以外が開いても操作できません"]];
+  const list=[["投票用（みんなに配る）","#bet","スマホで開いて名前を選ぶだけ。成績表タブもここにあります"],["大画面用（オッズ画面）","#board","テレビやモニターにつないだPCで全画面表示"],["管理用（あなた専用）","#admin","主催者向けの操作画面。参加者には投票用URLを共有してください"]];
   return `<div class="panel"><h2>URL <span class="tag">LINKS</span></h2><div class="urls">${list.map(([t,hs,d])=>`<div class="url"><div><b>${t}</b><div class="muted" style="font-size:12px">${d}</div><code>${BASE_URL+hs}</code></div><button class="btn sm" data-act="copyUrl" data-u="${BASE_URL+hs}">コピー</button></div>`).join("")}</div></div>`;
 }
-function adminData(){
+function adminData(expanded=false){
   const c=S.ui.confirm||"", which=c.startsWith("end:")?c.slice(4):null;
-  return `<div class="panel"><details data-fold="data" ${foldOpen("data")}><summary class="foldsum">終了 <span class="tag">FINISH</span></summary>
+  return `<div class="panel"><details data-fold="data" ${expanded?"open":foldOpen("data")}><summary class="foldsum">終了 <span class="tag">FINISH</span></summary>
     <p class="muted" style="font-size:13px;margin:0 0 10px">今日の遊びを終わりにします。大画面とスマホに1日の表彰式が出て、ここに全員の最終チップが出ます。「保存して終了」は、馬券データとレース結果のCSVも保存します（次回の分析用）。</p>
     ${which?`<div class="row"><span class="warn">${which==="save"?"CSVを保存して":"保存しないで"}終了します。よろしい？</span><button class="btn red" data-act="endGame" data-s="${which}">終了する</button><button class="btn sm" data-act="cancelConfirm">やめる</button></div>`
       :`<div class="row"><button class="btn go" data-act="askEnd" data-s="save">保存して終了</button><button class="btn" data-act="askEnd" data-s="nosave">保存しないで終了</button></div>`}
   </details></div>`;
 }
-/* 終了後：管理画面に全員の最終チップ。×で最初の画面へ */
+/* 終了後：全員の最終チップ。閉じる操作ではデータを変更しない。 */
 function endPopHtml(){
-  if(!S.state.ended) return "";
+  if(!S.state.ended || S.ui.endDismissed===S.state.ended) return "";
   const rows=finalRows();
-  return `<div class="endpop"><div class="endbox"><button class="endx" data-act="endClose" aria-label="閉じて最初の画面に戻る">×</button>
+  return `<div class="endpop"><div class="endbox"><button class="endx" data-act="endDismiss" aria-label="成績表を閉じる">×</button>
     <h2>本日の最終チップ</h2><div class="scroll"><table class="stbl"><tr><th>順位</th><th style="text-align:left">名前</th><th>配られた</th><th>最終</th><th>増減</th></tr>
     ${rows.map((x,i)=>`<tr class="${i===0?"rk1":""}"><td class="num">${i+1}</td><td style="text-align:left"><b>${esc(mname(x.id))}</b></td><td class="num">${x.given}</td><td class="num">${x.bal}</td><td class="num ${x.net>0?"plus":x.net<0?"minus":""}">${x.net>0?"+":""}${x.net}</td></tr>`).join("")}</table></div>
-    <p class="muted" style="font-size:12px;margin:10px 0 0">大画面とスマホに表彰式が出ています。×を押すと、今日のメンバー・チップ・出走表を消して最初の画面に戻ります（名簿と成績は残ります）。</p></div></div>`;
+    <p class="muted" style="font-size:12px;margin:10px 0 0">大画面とスマホに表彰式が出ています。閉じても今日のデータは残ります。次回は「終了後」の「次の開催を準備」から始められます。</p></div></div>`;
 }
 
 /* ---------------- actions ---------------- */
 function toast(msg){ const t=document.getElementById("toast"); t.innerHTML=`<div class="toast">${esc(msg)}</div>`; clearTimeout(toast._t); toast._t=setTimeout(()=>t.innerHTML="",2200); }
 const A={
+  adminPhase(d){ if(!["prep","live","finish"].includes(d.phase)) return; S.ui.adminPhase=d.phase; render(); },
+  endDismiss(){ S.ui.endDismissed=S.state.ended; render(); },
+  askNewDay(){ S.ui.confirm="newday"; render(); },
   claim(d){ const id=d.id; S.ui.claimOpen=false; mutateBets(S.uid, b=>{ b.member=id; b.tickets=b.tickets||[]; }); },
   sound(){ SFX.on=!SFX.on; try{ localStorage.setItem("mk_sound",SFX.on?"1":"0"); }catch(e){} if(SFX.on){ audio(); play("coin"); } render(); },
   celClose(){ S.cel=null; render(); },
@@ -1793,7 +1917,7 @@ const A={
   fullscreen(){ const d=document, el=d.documentElement;
     if(fsEl()){ (d.exitFullscreen||d.webkitExitFullscreen).call(d); return; }
     const f=el.requestFullscreen||el.webkitRequestFullscreen; if(f){ try{ const p=f.call(el); if(p&&p.catch) p.catch(()=>toast("全画面にできませんでした")); }catch(e){ toast("全画面にできませんでした"); } } },
-  foldPanel(d){ const f=S.ui.foldH=S.ui.foldH||{}; f[d.k]=!f[d.k]; render(); },
+  foldPanel(d){ const f=S.ui.foldH=S.ui.foldH||{}; f[d.k]=!f[d.k]; render(); const h=Array.from(document.querySelectorAll(".admin .foldh")).find(el=>el.dataset.k===d.k); if(h) h.focus(); },
   btab(d){ S.ui.btab=d.t; render(); },
   mjump(d){ const el=document.getElementById(d.id); if(el) el.scrollIntoView({behavior:"smooth",block:"start"}); },
   stScope(d){ S.ui.stScope=d.s; render(); },
@@ -1809,32 +1933,36 @@ const A={
     const r=curRace(), me=myMember(); if(!r||!me||!isLive(r)) return;
     if(S.ui.amtRaw!=null) normalizeAmt(document.getElementById("amtInput"));
     const m=S.ui.m, sel=S.ui.sel.slice(), amt=S.ui.amt;
-    if(amt%unit()){ toast(`${unit()}枚単位で賭けてね`); return; }
     if(sel.length!==MK[m].n) return;
-    const bal=balances()[me]||0; if(bal<amt){ toast("チップが足りません"); return; }
-    const cap=settings().caps[m]||0; const used=raceTickets(r).filter(t=>t.member===me&&t.m===m).reduce((a,t)=>a+t.amt,0);
-    if(cap && used+amt>cap){ toast(`${MK[m].label}は1レース${cap}枚までです`); return; }
-    mutateBets(S.uid, b=>{ b.member=me; (b.tickets=b.tickets||[]).push({id:rid(), race:r.id, member:me, m, sel, amt, t:now()}); });
-    S.ui.sel=[]; play("coin"); toast(`${MK[m].label} ${amt}枚 賭けました！`);
+    return ticketAction(()=>saveTicket(S.uid,{id:rid(),race:r.id,member:me,m,sel,amt},false),()=>{
+      S.ui.sel=[]; play("coin"); toast(`${MK[m].label} ${amt}枚 賭けました！`);
+    });
   },
   betSelf(){
     const r=curRace(), me=myMember(); if(!r||!me||!isLive(r)||!r.runners.includes(me)) return;
     if(S.ui.amtRaw!=null) normalizeAmt(document.getElementById("amtInput"));
-    const cap=settings().caps.self||0, amt=S.ui.amt;
-    if(amt%unit()){ toast(`${unit()}枚単位で賭けてね`); return; }
-    const used=raceTickets(r).filter(t=>t.member===me&&t.m==="win").reduce((a,t)=>a+t.amt,0);
-    if(!cap||used+amt>cap){ toast(`自分への単勝は1レース${cap}枚までです`); return; }
-    if((balances()[me]||0)<amt){ toast("チップが足りません"); return; }
-    mutateBets(S.uid, b=>{ b.member=me; (b.tickets=b.tickets||[]).push({id:rid(), race:r.id, member:me, m:"win", sel:[me], amt, t:now()}); });
-    play("coin"); toast(`自分の単勝 ${amt}枚！ 勝つしかない`);
+    const amt=S.ui.amt;
+    return ticketAction(()=>saveTicket(S.uid,{id:rid(),race:r.id,member:me,m:"win",sel:[me],amt},true),()=>{
+      play("coin"); toast(`自分の単勝 ${amt}枚！ 勝つしかない`);
+    });
   },
-  cancelT(d){ const r=curRace(); if(!r||!isLive(r)) return; mutateBets(S.uid, b=>{ b.tickets=(b.tickets||[]).filter(t=>t.id!==d.id); }); toast("取り消しました"); },
+  cancelT(d){
+    const r=curRace(); if(!r||!isLive(r)) return;
+    const path="bets/"+S.uid;
+    return ticketAction(()=>mutateDocuments(["game/state",path],docs=>{
+      const state=docs["game/state"], current=state&&state.races[state.cur];
+      if(!current||current.id!==r.id||!isLive(current)) throw writeError("受付は終了しました。取り消しできません");
+      const next=clone(docs[path]||{tickets:[]});
+      next.tickets=(next.tickets||[]).filter(t=>!(t.id===d.id&&t.race===r.id));
+      return {[path]:next};
+    }),()=>toast("取り消しました"));
+  },
   /* admin */
   addMember(){ const name=(S.ui.form.newName||"").trim(); if(!name) return; if(members().some(m=>m.name===name)){ toast("同じ名前がいます"); return; }
     const p=roster().find(x=>x.name===name), id=p?p.id:"p"+rid();
     S.ui.form.newName="";
     if(!p) mutateRoster(r=>{ r.players.push({id, name}); });
-    let re=false; mutateState(s=>{ s.members.push({id, name, tb:Math.random()}); re=rescheduleRest(s); }).then(()=>{ if(re) toast(`${name}が途中参加。残りの出走表を組み直しました`); });
+    let re=false; mutateState(s=>{ s.members.push({id, name, tb:Math.random()}); re=rescheduleRest(s); }).then(ok=>{ if(ok&&re) toast(`${name}が途中参加。残りの出走表を組み直しました`); });
     toast(p?`${name}（登録済み）を追加`:`${name}を追加して名簿に保存しました`); },
   renameStart(d){ S.ui.editName=d.id; S.ui.form["rename_"+d.id]=mname(d.id); render(); const el=document.getElementById("rename_"+d.id); if(el){ el.focus(); el.select(); } },
   renameCancel(){ if(S.ui.editName) delete S.ui.form["rename_"+S.ui.editName]; S.ui.editName=null; render(); },
@@ -1845,7 +1973,7 @@ const A={
     mutateState(s=>{ const m=s.members.find(x=>x.id===id); if(m) m.name=name; });
     if(roster().some(p=>p.id===id)) mutateRoster(r=>{ const p=r.players.find(x=>x.id===id); if(p) p.name=name; });
     toast(`名前を「${name}」に変えました`); },
-  addRoster(d){ const p=roster().find(x=>x.id===d.id); if(!p||members().some(m=>m.id===p.id)) return; let re=false; mutateState(s=>{ s.members.push({id:p.id, name:p.name, tb:Math.random()}); re=rescheduleRest(s); }).then(()=>{ if(re) toast(`${p.name}が途中参加。残りの出走表を組み直しました`); }); },
+  addRoster(d){ const p=roster().find(x=>x.id===d.id); if(!p||members().some(m=>m.id===p.id)) return; let re=false; mutateState(s=>{ s.members.push({id:p.id, name:p.name, tb:Math.random()}); re=rescheduleRest(s); }).then(ok=>{ if(ok&&re) toast(`${p.name}が途中参加。残りの出走表を組み直しました`); }); },
   addAllRoster(){ const add=roster().filter(p=>!members().some(m=>m.id===p.id)); if(!add.length) return; mutateState(s=>{ add.forEach(p=>s.members.push({id:p.id, name:p.name, tb:Math.random()})); rescheduleRest(s); }); toast(`${add.length}人を追加しました`); },
   delRoster(d){ if(S.ui.confirm!=="del:"+d.id){ S.ui.confirm="del:"+d.id; render(); return; } S.ui.confirm=null; mutateRoster(r=>{ r.players=r.players.filter(p=>p.id!==d.id); }); toast("名簿から消しました（成績は残ります）"); },
   mark(d){ const r=curRace(), me=myMember(); if(!r||!me||!isLive(r)) return;
@@ -1858,23 +1986,35 @@ const A={
     const r=curRace();
     if(r && isLive(r) && r.runners.includes(d.id)){ toast(`${mname(d.id)}は今のレースに出走中。レースが終わってから離脱してね`); return; }
     if(active().length-1<5) toast("参加者が4人以下になると賭ける人がいなくなります");
-    let re=false; mutateState(s=>{ const m=s.members.find(x=>x.id===d.id); if(m) m.left=true; re=rescheduleRest(s); }).then(()=>toast(`${mname(d.id)}が離脱${re?"。残りの出走表を組み直しました":""}`));
+    let re=false; mutateState(s=>{ const m=s.members.find(x=>x.id===d.id); if(m) m.left=true; re=rescheduleRest(s); }).then(ok=>{ if(ok) toast(`${mname(d.id)}が離脱${re?"。残りの出走表を組み直しました":""}`); });
   },
   toggleRace(d){
     const m0=mem(d.id); if(!m0) return; const off=!m0.noRace, r=curRace();
     if(off && r && r.status!=="done" && r.runners.includes(d.id)){ toast(`${m0.name}は今のレースに出走中。このレースが終わってから出走×にしてね`); return; }
     if(off && racers().filter(x=>x.id!==d.id).length<4){ toast("走れる人が4人未満になるので出走×にできません"); return; }
     let re=false; mutateState(s=>{ const m=s.members.find(x=>x.id===d.id); if(m) m.noRace=off; re=s.races.length?rescheduleRest(s):false; })
-      .then(()=>toast(`${m0.name}を${off?"出走×（レースに入れない）":"出走できる"}にしました${re?"。残りの出走表を組み直しました":""}`));
+      .then(ok=>{ if(ok) toast(`${m0.name}を${off?"出走×（レースに入れない）":"出走できる"}にしました${re?"。残りの出走表を組み直しました":""}`); });
   },
-  rejoin(d){ let re=false; mutateState(s=>{ const m=s.members.find(x=>x.id===d.id); if(m) m.left=false; re=rescheduleRest(s); }).then(()=>toast(`${mname(d.id)}が復帰${re?"。残りの出走表を組み直しました":""}`)); },
+  rejoin(d){ let re=false; mutateState(s=>{ const m=s.members.find(x=>x.id===d.id); if(m) m.left=false; re=rescheduleRest(s); }).then(ok=>{ if(ok) toast(`${mname(d.id)}が復帰${re?"。残りの出走表を組み直しました":""}`); }); },
   delMember(d){ mutateState(s=>{ s.members=s.members.filter(m=>m.id!==d.id); }); },
-  send(d){ const n=Math.abs(parseInt(S.ui.form["send_"+d.id],10)||0); if(!n){ toast("枚数を入れてね"); return; }
-    const v=d.sign==="-1"?-n:n, bal=balances()[d.id]||0;
-    if(v<0 && n>bal){ toast(`${mname(d.id)}の残高は${bal}枚です`); return; }
-    S.ui.form["send_"+d.id]="";
-    mutateLedger(l=>{ (l.entries=l.entries||[]).push({id:rid(), gameId:S.state.gameId, member:d.id, amt:v, t:now()}); });
-    toast(v>0?`${mname(d.id)}に${n}枚配りました`:`${mname(d.id)}から${n}枚減らしました`); },
+  send(d){
+    const field="send_"+d.id, raw=S.ui.form[field], n=Number(raw);
+    if(!S.isOwner||!Number.isSafeInteger(n)||n<=0){ toast("正の整数で枚数を入れてください"); return Promise.resolve(false); }
+    const value=d.sign==="-1"?-n:n, gid=S.state.gameId, entryId=rid();
+    return adminTask("send:"+d.id,()=>mutateDocuments(["game/state","game/ledger"],docs=>{
+      const state=docs["game/state"], ledger=clone(docs["game/ledger"]||{entries:[]});
+      if(!state||state.gameId!==gid||!state.members.some(m=>m.id===d.id)) throw writeError("参加者の情報が更新されました。確認してください");
+      const previousState=S.state, previousLedger=S.ledger;
+      S.state=state; S.ledger=ledger;
+      try{ if(value<0&&n>(balances()[d.id]||0)) throw writeError("残高を超えるチップは減らせません"); }
+      finally{ S.state=previousState; S.ledger=previousLedger; }
+      ledger.entries.push({id:entryId,gameId:gid,member:d.id,amt:value,t:now()});
+      return {"game/ledger":ledger};
+    }),()=>{
+      if(S.ui.form[field]===raw) S.ui.form[field]="";
+      toast(value>0?`${mname(d.id)}に${n}枚配りました`:`${mname(d.id)}から${n}枚減らしました`);
+    });
+  },
   rc(d){ S.ui.raceCount=+d.r; render(); },
   fin(d){ const k=d.k; mutateState(s=>{ s.finals=Object.assign({g1:true,dobe:true}, s.finals||{}); s.finals[k]=!s.finals[k]; }); },
   makeSchedule(){
@@ -1882,55 +2022,73 @@ const A={
     if(ids.length<4){ toast("走れる人が4人未満です（出走×を外してください）"); return; }
     const sch=makeSchedule(ids, scheduleTargets(ids,R).tgt); if(!sch){ toast("組み合わせを作れませんでした"); return; }
     const nr=!!S.state.newRound;
-    mutateState(s=>{ const tr=(s.round||1)+(s.newRound?1:0), keep=(s.races||[]).filter(r=>(r.round||1)!==tr), base=keep.length;
+    return mutateState(s=>{ const tr=(s.round||1)+(s.newRound?1:0), keep=(s.races||[]).filter(r=>(r.round||1)!==tr), base=keep.length;
       s.races=keep.concat(sch.map((runners,i)=>({id:"r"+rid(), no:base+i+1, round:tr, type:"prelim", runners, status:i===0?"open":"wait", closeAt:null, settle:null})));
-      s.cur=base; s.round=tr; s.newRound=false; });
-    toast(nr?"次の大会の出走表を作りました！受付開始":"出走表を作りました！第1レース受付開始");
+      s.cur=base; s.round=tr; s.newRound=false;
+    }).then(ok=>{ if(ok){ S.ui.adminPhase="live"; render(); toast(nr?"次の大会の出走表を作りました！受付開始":"出走表を作りました！第1レース受付開始"); } return ok; });
   },
-  countdown(){ const sec=settings().countdown; mutateState(s=>{ const r=s.races[s.cur]; r.status="countdown"; r.closeAt=now()+sec*1000; }); },
-  plus30(){ mutateState(s=>{ const r=s.races[s.cur]; if(r.closeAt){ r.closeAt+=30000; r.ext=(r.ext||0)+1; } }); },
-  closeNow(){ S.ui.order=[]; mutateState(s=>{ const r=s.races[s.cur]; if(r.status==="countdown"&&r.closeAt&&now()<r.closeAt-5000) r.early=1; r.status="closed"; r.closeAt=Math.min(r.closeAt||Infinity, now()); }); },
-  reopen(){ mutateState(s=>{ const r=s.races[s.cur]; r.status="open"; r.closeAt=null; }); },
+  countdown(){ const sec=settings().countdown; return mutateCurrentRace((s,r)=>{ if(r.status!=="open") throw writeError("投票受付中に操作してください"); r.status="countdown"; r.closeAt=now()+sec*1000; }); },
+  plus30(){ return mutateCurrentRace((s,r)=>{ if(r.status!=="countdown"||!isLive(r)) throw writeError("締切前に操作してください"); r.closeAt+=30000; r.ext=(r.ext||0)+1; }); },
+  closeNow(){ return mutateCurrentRace((s,r)=>{ if(!["open","countdown"].includes(r.status)) throw writeError("受付中のレースだけ締切できます"); if(r.status==="countdown"&&r.closeAt&&now()<r.closeAt-5000) r.early=1; r.status="closed"; r.closeAt=Math.min(r.closeAt||Infinity,now()); }).then(ok=>{ if(ok) S.ui.order=[]; return ok; }); },
+  reopen(){ return mutateCurrentRace((s,r)=>{ if(r.status!=="closed") throw writeError("結果確定前の締切だけ取り消せます"); r.status="open"; r.closeAt=null; }); },
   orderPick(d){ const o=S.ui.order, i=o.indexOf(d.id); if(i>=0) o.splice(i,1); else o.push(d.id); render(); },
   orderReset(){ S.ui.order=[]; render(); },
   confirmResult(){
-    const r=curRace(); if(!r) return; let o=S.ui.order.filter(id=>r.runners.includes(id));
+    const r=curRace(); if(!S.isOwner||!r||r.status!=="closed") return; let o=[...new Set(S.ui.order.filter(id=>r.runners.includes(id)))];
     if(o.length===r.runners.length-1) o.push(r.runners.find(id=>!o.includes(id)));
     if(o.length!==r.runners.length) return;
     const rr=clone(r); rr.order=o; const settle=settleRace(rr);
-    S.ui.order=[];
     const pl={}; raceTickets(rr).forEach(t=>pl[t.member]=(pl[t.member]||0)-t.amt);
     for(const [m,a] of Object.entries(settle.payouts)) pl[m]=(pl[m]||0)+a;
     for(const [m,a] of Object.entries(settle.prizes)) pl[m]=(pl[m]||0)+a;
     const gid=S.state.gameId, rid0=r.id, typ=r.type, pools={}; rr.settle=settle;
     const htix=raceTickets(rr).map(t=>({member:t.member, m:t.m, sel:t.sel, amt:t.amt, pay:ticketPay(rr,t)}));
     marketsFor(rr).forEach(m=>pools[m]=0); raceTickets(rr).forEach(t=>{ if(pools[t.m]!=null) pools[t.m]+=t.amt; });
-    mutateState(s=>{ const x=s.races[s.cur]; x.order=o; x.settle=settle; x.status="done"; if(!x.closeAt) x.closeAt=now(); });
-    mutateHistory(hh=>{ hh.races=hh.races.filter(x=>x.rid!==rid0); hh.races.push({rid:rid0, gid, t:now(), type:typ, no:r.no, runners:r.runners, order:o, pl, pools, ext:r.ext||0, early:r.early?1:0, tix:htix, prizes:settle.prizes}); });
+    return mutateDocuments(["game/state","game/history"],docs=>{
+      const state=clone(docs["game/state"]), history=clone(docs["game/history"]||{races:[]});
+      const x=state&&state.races[state.cur];
+      if(!x||x.id!==rid0||state.gameId!==gid||!sameData(x,r)) throw writeError("レースが更新されました。着順を確認してやり直してください");
+      x.order=o; x.settle=settle; x.status="done"; if(!x.closeAt) x.closeAt=now();
+      history.races=history.races.filter(x=>x.rid!==rid0);
+      history.races.push({rid:rid0,gid,t:now(),type:typ,no:r.no,runners:r.runners,order:o,pl,pools,ext:r.ext||0,early:r.early?1:0,tix:htix,prizes:settle.prizes});
+      return {"game/state":state,"game/history":history};
+    }).then(ok=>{ if(ok){ S.ui.order=[]; render(); } return ok; });
   },
-  undoResult(){ const r=curRace(); const rid0=r&&r.id; mutateState(s=>{ const x=s.races[s.cur]; x.settle=null; x.order=null; x.status="closed"; }); if(rid0) mutateHistory(hh=>{ hh.races=hh.races.filter(x=>x.rid!==rid0); }); },
-  nextRace(){ mutateState(s=>{ s.cur++; const r=s.races[s.cur]; r.status="open"; r.closeAt=null; }); },
+  undoResult(){
+    const r=curRace(); if(!S.isOwner||!r||r.status!=="done") return;
+    return mutateDocuments(["game/state","game/history"],docs=>{
+      const state=clone(docs["game/state"]), history=clone(docs["game/history"]||{races:[]});
+      const x=state&&state.races[state.cur];
+      if(!x||x.id!==r.id||!sameData(x,r)) throw writeError("レースが更新されました。最新の結果を確認してください");
+      x.settle=null; x.order=null; x.status="closed";
+      history.races=history.races.filter(h=>h.rid!==r.id);
+      return {"game/state":state,"game/history":history};
+    });
+  },
+  nextRace(){ return mutateCurrentRace((s,r)=>{
+    if(r.status!=="done"||s.cur+1>=s.races.length||s.races[s.cur+1].status!=="wait") throw writeError("確定結果と次のレースを確認してください");
+    s.cur++; const next=s.races[s.cur]; next.status="open"; next.closeAt=null;
+  }).then(ok=>{ if(ok){ S.ui.order=[]; S.ui.adminPhase="live"; render(); } return ok; }); },
   makeFinals(){
     const st=standings(); if(st.length<4) return;
     const top=st.slice(0,4).map(x=>x.id), bottom=st.slice(-4).map(x=>x.id);
     const F=finalsOn(); if(!F.g1&&!F.dobe) return;
-    mutateState(s=>{ const first=s.races.length;
+    return mutateCurrentRace((s,r)=>{ const first=s.races.length;
+      if(r.status!=="done"||s.cur!==first-1||s.races.some(x=>(x.round||1)===(s.round||1)&&x.type!=="prelim")) throw writeError("決勝は予選終了後に一度だけ作成できます");
       if(F.dobe) s.races.push({id:"r"+rid(), no:s.races.length+1, round:s.round||1, type:"dobe", runners:bottom, status:"wait", closeAt:null, settle:null});
       if(F.g1) s.races.push({id:"r"+rid(), no:s.races.length+1, round:s.round||1, type:"g1", runners:top, status:"wait", closeAt:null, settle:null});
-      s.cur=first; s.races[first].status="open"; });
-    toast(F.dobe?"決勝を組みました！まずはD決定戦":"決勝を組みました！G1グランプリ");
+      s.cur=first; s.races[first].status="open";
+    }).then(ok=>{ if(ok) toast(F.dobe?"決勝を組みました！まずはD決定戦":"決勝を組みました！G1グランプリ"); return ok; });
+
   },
   ptab(d){ S.ui.pm=d.m; S.ui.psel=[]; render(); },
   ppick(d){ const m=S.ui.pm, n=MK[m].n, s=S.ui.psel, i=s.indexOf(d.id); if(i>=0) s.splice(i,1); else if(n===1) S.ui.psel=[d.id]; else if(s.length<n) s.push(d.id); render(); },
   pbet(){
-    const r=curRace(), pm=S.ui.proxyMember, m=S.ui.pm, sel=S.ui.psel.slice(), amt=parseInt(S.ui.pamt,10)||0;
-    if(amt%unit()){ toast(`${unit()}枚単位で入力してね`); return; }
-    if(!r||!isLive(r)||!pm||sel.length!==MK[m].n||amt<1) return;
-    if((balances()[pm]||0)<amt){ toast("チップが足りません"); return; }
-    const cap=settings().caps[m]||0, used=raceTickets(r).filter(t=>t.member===pm&&t.m===m).reduce((a,t)=>a+t.amt,0);
-    if(cap&&used+amt>cap){ toast(`${MK[m].label}は1レース${cap}枚までです`); return; }
-    mutateBets("proxy", b=>{ (b.tickets=b.tickets||[]).push({id:rid(), race:r.id, member:pm, m, sel, amt, t:now()}); });
-    S.ui.psel=[]; toast(`${mname(pm)}：${MK[m].label} ${amt}枚`);
+    const r=curRace(), pm=S.ui.proxyMember, m=S.ui.pm, sel=S.ui.psel.slice(), amt=Number(S.ui.pamt);
+    if(!S.isOwner||!r||!isLive(r)||!pm||sel.length!==MK[m].n) return;
+    return ticketAction(()=>saveTicket("proxy",{id:rid(),race:r.id,member:pm,m,sel,amt},false),()=>{
+      S.ui.psel=[]; toast(`${mname(pm)}：${MK[m].label} ${amt}枚`);
+    });
   },
   saveSettings(){
     const f=S.ui.form, st=clone(settings()), num=(id,d)=>{ const x=parseFloat(f[id]); return isFinite(x)?x:d; };
@@ -1939,14 +2097,32 @@ const A={
     st.prizes.prelim=[num("pz_prelim_0",st.prizes.prelim[0]),num("pz_prelim_1",st.prizes.prelim[1])];
     st.prizes.g1=[num("pz_g1_0",st.prizes.g1[0]),num("pz_g1_1",st.prizes.g1[1])];
     st.prizes.dobe=[num("pz_dobe_0",st.prizes.dobe[0])];
-    Object.keys(f).filter(k=>/^(rate_|pz_)/.test(k)).forEach(k=>delete f[k]);
-    mutateState(s=>{ s.settings=st; }); toast("設定を保存しました");
+    const submitted=Object.fromEntries(Object.entries(f).filter(([k])=>/^(rate_|pz_)/.test(k)));
+    return adminTask("settings",()=>mutateState(s=>{ s.settings=st; }),()=>{
+      for(const [key,value] of Object.entries(submitted)) if(f[key]===value) delete f[key];
+      toast("設定を保存しました");
+    });
   },
-  newRound(){ mutateState(s=>{ s.newRound=true; }); toast("右の「出走表」でレース数を選んでください"); },
+  newRound(){ return mutateState(s=>{ s.newRound=true; }).then(ok=>{ if(ok){ S.ui.adminPhase="prep"; render(); toast("次の大会のレース数を選んでください"); } return ok; }); },
   askEnd(d){ S.ui.confirm="end:"+d.s; render(); },
-  async endGame(d){ S.ui.confirm=null; if(d.s==="save"){ await exportCSV("tickets"); await exportCSV("races"); }
-    mutateState(s=>{ s.ended=now(); s.ceremony=s.ended; s.newRound=false; }); },
-  endClose(){ S.ui.confirm=null; const keep=settings(); delete keep.learned; mutateState(s=>{ Object.assign(s, defaultState()); s.settings=keep; s.ended=null; s.ceremony=null; s.round=1; s.newRound=false; }); toast("最初の画面に戻りました"); },
+  async endGame(d){
+    if(S.ui.ending) return false;
+    S.ui.ending=true; render();
+    try{
+      if(d.s==="save" && (!await exportCSV("tickets") || !await exportCSV("races"))) return false;
+      const ok=await mutateState(s=>{ s.ended=now(); s.ceremony=s.ended; s.newRound=false; });
+      if(ok){ S.ui.confirm=null; S.ui.adminPhase="finish"; }
+      return ok;
+    }finally{ S.ui.ending=false; render(); }
+  },
+  endClose(){
+    if(S.ui.confirm!=="newday"||!S.state.ended) return Promise.resolve(false);
+    const ended=S.state.ended, keep=settings(); delete keep.learned;
+    return mutateState(s=>{
+      if(s.ended!==ended) throw writeError("開催データが更新されました。もう一度確認してください");
+      Object.assign(s,defaultState()); s.settings=keep; s.ended=null; s.ceremony=null; s.round=1; s.newRound=false;
+    }).then(ok=>{ if(ok){ S.ui.confirm=null; S.ui.endDismissed=null; S.ui.adminPhase="prep"; render(); toast("次の開催を準備できます"); } return ok; });
+  },
   cerPhoneClose(){ S.ui.cerClosed=S.state.ended; S.lastOverlayKey=""; render(); },
   askReset(){ S.ui.confirm="reset"; render(); },
   cancelConfirm(){ S.ui.confirm=null; render(); },
@@ -1972,8 +2148,8 @@ async function exportCSV(kind){
   }
   const csv="﻿"+rows.map(r=>r.map(q).join(",")).join("\n");
   const dl=await claude.use("downloads");
-  if(!dl){ toast("このビューでは保存できません"); return; }
-  try{ await dl.save({filename:`marika-keiba-${kind}.csv`, data:csv}); }catch(e){ if(e&&e.code!=="declined") toast("保存できませんでした"); }
+  if(!dl){ toast("このビューでは保存できません"); return false; }
+  try{ await dl.save({filename:`marika-keiba-${kind}.csv`, data:csv}); return true; }catch(e){ toast(e&&e.code==="declined"?"保存を中止しました。大会は終了していません":"保存できませんでした。大会は終了していません"); return false; }
 }
 
 /* ---------------- events ---------------- */
@@ -2000,7 +2176,7 @@ function normalizeAmt(el){
   if(raw!==v) toast(`${U}枚単位にして ${v}枚にしました`);
   return v;
 }
-document.addEventListener("keydown",e=>{ if(e.isComposing||e.keyCode===229) return; if(e.key==="Enter"&&e.target.id==="adminPin") A.pin(); if(e.target.id&&e.target.id.startsWith("rename_")){ if(e.key==="Enter") A.renameSave({id:e.target.id.slice(7)}); else if(e.key==="Escape") A.renameCancel(); } });
+document.addEventListener("keydown",e=>{ if((e.key==="Enter"||e.key===" ")&&e.target.dataset&&e.target.dataset.act==="foldPanel"){ e.preventDefault(); A.foldPanel(e.target.dataset); return; } if(e.isComposing||e.keyCode===229) return; if(e.key==="Enter"&&e.target.id==="adminPin") A.pin(); if(e.target.id&&e.target.id.startsWith("rename_")){ if(e.key==="Enter") A.renameSave({id:e.target.id.slice(7)}); else if(e.key==="Escape") A.renameCancel(); } });
 window.addEventListener("hashchange",()=>{ S.lastOverlayKey=""; render(); });
 // 裏に回っていたタブが表に出たら、最新の状態で描き直す（大画面の結果がすぐ出るように）
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ S.lastOverlayKey=""; render(); } });
@@ -2011,7 +2187,7 @@ setInterval(()=>{
   const r=curRace(); if(!r) return;
   document.querySelectorAll("[data-cd]").forEach(el=>{ const s=remain(r); if(s!==null){ el.textContent=mmss(s); el.classList.toggle("hot",s<=10); } });
   if((mode()==="admin"||mode()==="adminhelp") && S.isOwner && r.status==="countdown" && now()>=r.closeAt && !S.closing){
-    S.closing=true; S.ui.order=[]; mutateState(s=>{ const x=s.races[s.cur]; if(x.status==="countdown") x.status="closed"; }).finally(()=>S.closing=false);
+    S.closing=true; S.ui.order=[]; mutateCurrentRace((s,x)=>{ if(x.status==="countdown"&&now()>=x.closeAt) x.status="closed"; }).finally(()=>S.closing=false);
   }
   sfxWatch();
   const key=r.id+r.status+(isLive(r)?"L":"C")+(r.status==="countdown"&&remain(r)<=5?remain(r):"");

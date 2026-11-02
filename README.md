@@ -53,3 +53,10 @@ python3 tests/browser_smoke.py
 ```sh
 KEIBA_SCREENSHOT_DIR=/tmp/mariokart-admin-screenshots python3 tests/browser_smoke.py
 ```
+
+
+## スマホのキャラクター表示
+
+投票画面では `assets/kart-characters.png` のキャラクター画像を使う。SVGの `preserveAspectRatio="xMidYMid meet"` で全体を収め、帽子やタイヤが表示枠で切れないようにする。画像内の元のUIラベルはクリップして表示しない。大画面側は従来のカートを維持する。
+
+実アプリと独立デモの表示・投票・取消・リセット、360/390/414px幅での画像の収まりは `python3 tests/character_demo.py` で確認できる。実アプリの検証ではFirebaseをローカルのテストダブルに差し替える。

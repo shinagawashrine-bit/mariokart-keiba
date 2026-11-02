@@ -26,6 +26,16 @@ try:
         page.set_default_navigation_timeout(10000)
         errors = []
         page.on('pageerror', lambda e: (errors.append(str(e)), print('PAGE ERROR:',e,flush=True)))
+        def assert_full_character_images():
+            for graphic in page.locator('.character-kart').all():
+                assert graphic.get_attribute('preserveAspectRatio')=='xMidYMid meet'
+                assert graphic.evaluate("""el=>{
+                  const v=el.viewBox.baseVal, b=el.getBoundingClientRect(), m=el.getScreenCTM();
+                  const a=new DOMPoint(v.x,v.y).matrixTransform(m);
+                  const z=new DOMPoint(v.x+v.width,v.y+v.height).matrixTransform(m);
+                  return a.x>=b.left-1&&a.y>=b.top-1&&z.x<=b.right+1&&z.y<=b.bottom+1;
+                }"""), 'Character is clipped by its viewport'
+
         page.add_init_script("localStorage.setItem('mk_device','real-player-device'); localStorage.setItem('mk_admin','keep-existing-role');")
         requests=[]
         page.on('request',lambda r: requests.append(r.url))
@@ -35,9 +45,15 @@ try:
         page.locator('[data-act="pick"][data-id="p1"]').click()
         expect(page.locator('.rcard[data-id="p1"]')).to_have_class('rcard c0 sel')
         page.evaluate('window.scrollTo(0,0)')
-        for card in page.locator('.rcard').all():
-            box=card.bounding_box()
-            assert box['y']+box['height']<=page.locator('.betbar').bounding_box()['y'], 'Card covered by purchase controls'
+        # Read the layout in one browser task so a re-render cannot detach a node mid-check.
+        assert page.evaluate("""()=>{
+            const bar=document.querySelector('.betbar').getBoundingClientRect();
+            return Array.from(document.querySelectorAll('.rcard')).every(card=>card.getBoundingClientRect().bottom<=bar.top);
+        }"""), 'Card covered by purchase controls'
+        # Illustrations should dominate the card, rather than remain 60px icons.
+        for image in page.locator('.rcard .kwrap').all():
+            assert image.bounding_box()['height']>=105, 'Character image is too small'
+        assert_full_character_images()
         page.screenshot(path='/tmp/character-demo-screen.png')
         page.locator('[data-act="bet"]').click()
         expect(page.locator('#toast')).to_contain_text('賭けました')
@@ -70,7 +86,52 @@ try:
         assert page.evaluate("localStorage.getItem('mk_admin')")=='keep-existing-role'
         assert all(urlparse(url).hostname=='127.0.0.1' or url.startswith('data:') for url in requests), requests
         assert not errors,errors
-        print('PASS: independent character demo, single/exacta purchase, amount, cancellation, reset, narrow screen, and production storage isolation',flush=True)
+        print('PASS: independent demo purchase, cancellation, reset, storage isolation and uncropped artwork',flush=True)
+        # Exercise the adopted artwork in the real app with only Firebase replaced.
+        sdk=(ROOT/'tests/fake-firestore.js').read_text()+'''
+window.testBackend=createTestFirestore();
+const labels=['たくみ','ゆう','はる','けん','さき'];
+testBackend.data['game/state'].members.forEach((m,i)=>m.name=labels[i]);
+testBackend.data['bets/real-player-device']=testBackend.data['bets/device'];
+window.firebase={apps:[{}],firestore:()=>testBackend.firestore};
+'''
+        def app_route(route):
+            u=urlparse(route.request.url)
+            if u.path=='/config.js':
+                route.fulfill(content_type='application/javascript',body="window.MK_CONFIG={firebase:{apiKey:'local-test'}};")
+            elif u.path.endswith('firebase-app-compat.js'):
+                route.fulfill(content_type='application/javascript',body=sdk)
+            elif u.hostname=='127.0.0.1': route.continue_()
+            else: route.fulfill(content_type='application/javascript',body='')
+        page.route('**/*',app_route)
+        page.set_viewport_size({'width':390,'height':844})
+        page.goto(f'http://127.0.0.1:{server.server_port}/#bet')
+        page.wait_for_function('S.ready')
+        expect(page.locator('.character-phone .rcard .character-kart')).to_have_count(4)
+        page.locator('[data-act="pick"][data-id="p1"]').click()
+        assert_full_character_images()
+        # Read the layout in one browser task so a re-render cannot detach a node mid-check.
+        assert page.evaluate("""()=>{
+            const bar=document.querySelector('.betbar').getBoundingClientRect();
+            return Array.from(document.querySelectorAll('.rcard')).every(card=>card.getBoundingClientRect().bottom<=bar.top);
+        }"""), 'Card covered by purchase controls'
+        page.screenshot(path='/tmp/character-app-no-crop.png')
+        page.locator('[data-act="bet"]').click()
+        page.wait_for_function("S.bets['real-player-device'].tickets.length===1")
+        expect(page.locator('.me .bal')).to_contain_text('900')
+        for width in (360,414):
+            page.set_viewport_size({'width':width,'height':844})
+            assert_full_character_images()
+            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        page.evaluate("location.hash='board'")
+        expect(page.locator('.board')).to_be_visible()
+        assert page.locator('.character-kart').count()==0
+        assert not errors,errors
+        page.set_viewport_size({'width':390,'height':844})
+        page.evaluate("testBackend.data['bets/real-player-device'].member='p1'; testBackend.notify(); location.hash='bet'")
+        expect(page.locator('.cheer .character-kart')).to_be_visible()
+        assert_full_character_images()
+        print('PASS: actual app purchase, 360/390/414px containment, driver artwork, and unchanged board',flush=True)
         browser.close()
 
 finally:

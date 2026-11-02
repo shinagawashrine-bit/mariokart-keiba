@@ -614,6 +614,27 @@ body[data-race="dobe"] .qr .code{background:#fff}
 .character-phone .betbar{padding-top:10px}.character-phone .betbar .ov{font-size:30px}.character-phone .betbar .hint{font-size:11px}
 .character-phone .betbar .row2 .go{font-size:18px!important;padding:10px 18px!important}
 .character-phone{padding-bottom:calc(var(--character-betbar-height,210px) + 22px)}
+
+/* 倍率を主役にし、AI予想は補助情報として並べる。 */
+.character-phone{gap:8px}
+.character-phone .rbanner>div:first-child{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.character-phone .rbanner h2{order:-1;margin:0!important}
+.character-phone .rbanner .type-prelim{display:none}
+.character-phone .rcard{padding-bottom:0}
+.character-phone .rcard .card-odds{display:flex;align-items:center;justify-content:space-between;gap:4px;background:#20232a;color:#fff;margin:0 -10px;padding:5px 9px;min-height:48px;font-style:normal}
+.character-phone .card-odds-meta{display:grid;gap:4px;flex-shrink:0;text-align:left;align-items:start}
+.character-phone .card-odds-meta>span:first-child{font-family:var(--f-body);font-size:9px;font-weight:500;color:#c9cdd5}
+.character-phone .card-ai{font-family:var(--f-body);font-size:10px;font-weight:800;line-height:1.3;color:#b6becb;white-space:nowrap}
+.character-phone .card-ai.ranked{color:#fff;background:#3456a4;border-radius:2px;padding:2px 4px;width:max-content}
+.character-phone .card-ai.pending{font-size:9px;font-weight:600;color:#b6becb}
+.character-phone .card-odds-value{color:#fff;font-family:var(--f-num);font-size:38px;font-weight:900;font-style:italic;line-height:1;letter-spacing:-.025em;white-space:nowrap}
+.character-phone .card-odds-value small{font-family:var(--f-body);font-size:12px;font-weight:700;font-style:normal;margin-left:2px;letter-spacing:0}
+.character-phone .card-odds-value.long{font-size:28px}
+.character-phone .rcard.sel .card-odds-value{color:#ffdc35}
+.character-phone .betbar .ov{font-size:38px}
+
+.character-phone .card-odds.up::after{color:#ff9e91}
+.character-phone .card-odds.down::after{color:#91baff}
 </style>
 
 <div id="app"></div>
@@ -762,7 +783,7 @@ function aiMarks(r){
   const mk={}; mk[o[0]]="◎"; mk[o[1]]="○"; mk[o[2]]="▲";
   return {h:o[0], t:o[1], a:o[2], mk, thin:runs<4};
 }
-function aiTag(r,id){ const m=aiMarks(r).mk[id]; return m?`<span class="ninki ai">AI${m}</span>`:""; }
+function aiTag(r,id){ const ai=aiMarks(r), m=ai.mk[id]; return !ai.thin&&m?`<span class="ninki ai">AI${m}</span>`:""; }
 function marksAgg(r){
   const agg={}; r.runners.forEach(id=>agg[id]={h:0,t:0,a:0,pts:0});
   Object.values(S.bets).forEach(d=>{ const mk=d.marks&&d.marks[r.id]; if(!mk||!d.member||r.runners.includes(d.member)) return;
@@ -1617,14 +1638,15 @@ function renderBet(){
   const ms=marketsFor(r);
   if(!ms.includes(S.ui.m)) S.ui.m="win";
   const m=S.ui.m, n=MK[m].n, sel=S.ui.sel.filter(id=>r.runners.includes(id));
+  const prediction=aiMarks(r);
   const cards=r.runners.map((id,i)=>{
     const o=O.odds.win[id], pos=sel.indexOf(id);
     return `<button class="rcard c${i} ${pos>=0?"sel":""}" data-act="pick" data-id="${id}" ${live?"":"disabled"}>
       ${pos>=0?`<span class="pos">${MK[m].ordered&&n>1?(pos+1)+"着":"✓"}</span>`:""}
       <div class="top"><span class="lanebadge c${i}">${i+1}</span><span class="nm">${esc(mname(id))}</span></div>
-      ${formMini(id)}${aiTag(r,id)?`<div style="margin-top:2px">${aiTag(r,id)}</div>`:""}
+      ${formMini(id)}
       <div class="kwrap">${characterKart(i)}</div>
-      <div class="o ${fc("win",id)}"><span class="muted" style="font-size:11px;font-family:var(--f-body)">単勝</span> ${o.est?'<span class="est">参考</span>':""}${fmtO(o.v)}</div>
+      <div class="o card-odds ${fc("win",id)}"><span class="card-odds-meta"><span>単勝${o.est?" · 参考":""}</span><span class="card-ai ${prediction.thin?"pending":prediction.mk[id]?"ranked":""}" title="通算成績と直近3走をもとにした参考予想">${prediction.thin?"AI準備中":prediction.mk[id]?`AI ${prediction.mk[id]}`:"AI —"}</span></span><strong class="card-odds-value ${fmtO(o.v).length>3?"long":""}">${fmtO(o.v)}<small>倍</small></strong></div>
     </button>`;
   }).join("");
   const tabs=ms.map(x=>`<button class="tab ${x===m?"on":""}" data-act="tab" data-m="${x}">${MK[x].label}<small>${MK[x].help}</small></button>`).join("");
@@ -1678,7 +1700,7 @@ function myTicketsClosed(r,me,O,mine){
 function marksPanel(r,me){
   const d=S.bets[S.uid]||{}, mk=(d.marks&&d.marks[r.id])||{};
   const ai=aiMarks(r);
-  return `<div class="mpanel"><div class="mt">予想の印 <span class="muted">（オッズ画面に「みんなの本命」が出ます）</span></div><div class="ailine"><span class="ninki ai">AI予想</span> ◎${esc(shortName(mname(ai.h)))}　○${esc(shortName(mname(ai.t)))}　▲${esc(shortName(mname(ai.a)))}${ai.thin?'<span class="muted" style="font-size:11px">（データ少なめ）</span>':""}</div>${[["h","◎","本命"],["t","○","対抗"],["a","▲","単穴"]].map(([k,s,l])=>`<div class="mrow"><span class="mk">${s}<small>${l}</small></span>${r.runners.map((id,i)=>`<button class="mbtn c${i} ${mk[k]===id?"on":""}" data-act="mark" data-k="${k}" data-id="${id}">${i+1}</button>`).join("")}</div>`).join("")}</div>`;
+  return `<div class="mpanel"><div class="mt">予想の印 <span class="muted">（オッズ画面に「みんなの本命」が出ます）</span></div><div class="ailine"><span class="ninki ai">AI予想</span> ${ai.thin?"準備中 · 過去の出走データが集まると表示します":`◎${esc(shortName(mname(ai.h)))}　○${esc(shortName(mname(ai.t)))}　▲${esc(shortName(mname(ai.a)))}`}</div>${[["h","◎","本命"],["t","○","対抗"],["a","▲","単穴"]].map(([k,s,l])=>`<div class="mrow"><span class="mk">${s}<small>${l}</small></span>${r.runners.map((id,i)=>`<button class="mbtn c${i} ${mk[k]===id?"on":""}" data-act="mark" data-k="${k}" data-id="${id}">${i+1}</button>`).join("")}</div>`).join("")}</div>`;
 }
 function resultMine(r,me){
   if(r.status!=="done"||!r.settle) return "";

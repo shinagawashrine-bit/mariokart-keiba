@@ -42,6 +42,7 @@ try:
         page.goto(f'http://127.0.0.1:{server.server_port}/demo/characters/#bet')
         page.wait_for_function('S.ready')
         expect(page.locator('.rcard .character-kart')).to_have_count(4)
+        expect(page.locator('.rcard .card-ai.pending')).to_have_count(4)
         page.locator('[data-act="pick"][data-id="p1"]').click()
         expect(page.locator('.rcard[data-id="p1"]')).to_have_class('rcard c0 sel')
         page.evaluate('window.scrollTo(0,0)')
@@ -115,7 +116,24 @@ window.firebase={apps:[{}],firestore:()=>testBackend.firestore};
             const bar=document.querySelector('.betbar').getBoundingClientRect();
             return Array.from(document.querySelectorAll('.rcard')).every(card=>card.getBoundingClientRect().bottom<=bar.top);
         }"""), 'Card covered by purchase controls'
+        expect(page.locator('.rcard .card-ai.pending')).to_have_count(4)
+        assert page.locator('.card-odds-value').first.evaluate('(el)=>parseFloat(getComputedStyle(el).fontSize)')>=38
         page.screenshot(path='/tmp/character-app-no-crop.png')
+        # Rankings need actual historical starts and must exclude this race's result.
+        page.evaluate("""()=>{
+          testBackend.data['game/history'].races=[
+            {rid:'old-race',gid:'previous-game',t:1,type:'prelim',order:['p3','p1','p2','p4'],pl:{}},
+            {rid:'r1',gid:'test-game',t:2,type:'prelim',order:['p4','p2','p1','p3'],pl:{}}
+          ];
+          testBackend.notify();
+        }""")
+        expect(page.locator('.rcard[data-id="p3"] .card-ai')).to_have_text('AI ◎')
+        expect(page.locator('.rcard[data-id="p1"] .card-ai')).to_have_text('AI ○')
+        expect(page.locator('.rcard[data-id="p2"] .card-ai')).to_have_text('AI ▲')
+        expect(page.locator('.rcard[data-id="p4"] .card-ai')).to_have_text('AI —')
+        colors=page.locator('.card-odds-value').evaluate_all('(els)=>els.map(el=>getComputedStyle(el).color)')
+        assert colors==['rgb(255, 220, 53)','rgb(255, 255, 255)','rgb(255, 255, 255)','rgb(255, 255, 255)'], colors
+        page.screenshot(path='/tmp/character-app-ai.png')
         page.locator('[data-act="bet"]').click()
         page.wait_for_function("S.bets['real-player-device'].tickets.length===1")
         expect(page.locator('.me .bal')).to_contain_text('900')

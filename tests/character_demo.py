@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright, expect
 
 ROOT=Path(__file__).resolve().parent.parent
+for shot in ('phone-tickets-unified.png','phone-driver-unified.png','phone-stats-unified.png'):
+    (Path('/tmp')/shot).unlink(missing_ok=True)
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -27,14 +29,18 @@ try:
         errors = []
         page.on('pageerror', lambda e: (errors.append(str(e)), print('PAGE ERROR:',e,flush=True)))
         def assert_full_character_images():
-            for graphic in page.locator('.character-kart').all():
-                assert graphic.get_attribute('preserveAspectRatio')=='xMidYMid meet'
-                assert graphic.evaluate("""el=>{
-                  const v=el.viewBox.baseVal, b=el.getBoundingClientRect(), m=el.getScreenCTM();
-                  const a=new DOMPoint(v.x,v.y).matrixTransform(m);
-                  const z=new DOMPoint(v.x+v.width,v.y+v.height).matrixTransform(m);
-                  return a.x>=b.left-1&&a.y>=b.top-1&&z.x<=b.right+1&&z.y<=b.bottom+1;
-                }"""), 'Character is clipped by its viewport'
+            # Components may re-render between protocol calls: measure live SVGs atomically.
+            page.wait_for_function("""()=>{
+              const graphics=Array.from(document.querySelectorAll('.character-kart'));
+              return graphics.length>0&&graphics.every(el=>{
+                if(el.getAttribute('preserveAspectRatio')!=='xMidYMid meet') return false;
+                const v=el.viewBox.baseVal,b=el.getBoundingClientRect(),m=el.getScreenCTM();
+                if(!m||!b.width||!b.height) return false;
+                const a=new DOMPoint(v.x,v.y).matrixTransform(m);
+                const z=new DOMPoint(v.x+v.width,v.y+v.height).matrixTransform(m);
+                return a.x>=b.left-1&&a.y>=b.top-1&&z.x<=b.right+1&&z.y<=b.bottom+1;
+              });
+            }""")
 
         page.add_init_script("localStorage.setItem('mk_device','real-player-device'); localStorage.setItem('mk_admin','keep-existing-role');")
         requests=[]
@@ -122,8 +128,8 @@ window.firebase={apps:[{}],firestore:()=>testBackend.firestore};
         # Rankings need actual historical starts and must exclude this race's result.
         page.evaluate("""()=>{
           testBackend.data['game/history'].races=[
-            {rid:'old-race',gid:'previous-game',t:1,type:'prelim',order:['p3','p1','p2','p4'],pl:{}},
-            {rid:'r1',gid:'test-game',t:2,type:'prelim',order:['p4','p2','p1','p3'],pl:{}}
+            {rid:'old-race',gid:'previous-game',t:Date.now()-86400000,type:'prelim',order:['p3','p1','p2','p4'],pl:{}},
+            {rid:'r1',gid:'test-game',t:Date.now(),type:'prelim',order:['p4','p2','p1','p3'],pl:{}}
           ];
           testBackend.notify();
         }""")
@@ -137,6 +143,22 @@ window.firebase={apps:[{}],firestore:()=>testBackend.firestore};
         page.locator('[data-act="bet"]').click()
         page.wait_for_function("S.bets['real-player-device'].tickets.length===1")
         expect(page.locator('.me .bal')).to_contain_text('900')
+        assert page.evaluate("()=>document.querySelector('.toast').getBoundingClientRect().bottom<=document.querySelector('.betbar').getBoundingClientRect().top"), 'Notification covers purchase controls'
+        expect(page.locator('.mybox-live > h2')).to_contain_text('あなたの馬券')
+        expect(page.locator('.mybox-live > h2')).to_contain_text('合計 100枚')
+        page.locator('[data-act="tab"][data-m="ex"]').click()
+        expect(page.locator('[data-act="tab"][data-m="ex"]')).to_have_attribute('aria-pressed','true')
+        page.locator('.poi').first.click()
+        expect(page.locator('.poi[aria-pressed="true"]')).to_have_count(1)
+        page.locator('[data-act="mark"][data-k="h"][data-id="p2"]').click()
+        expect(page.locator('[data-act="mark"][data-k="h"][data-id="p2"]')).to_have_attribute('aria-pressed','true')
+        page.evaluate("""()=>{
+            clearTimeout(toast._t); document.getElementById('toast').innerHTML='';
+            const rect=document.querySelector('.mybox-live').getBoundingClientRect();
+            const panel=document.querySelector('.betbar').getBoundingClientRect();
+            window.scrollBy(0,Math.max(0,rect.bottom-panel.top+16));
+        }""")
+        page.screenshot(path='/tmp/phone-tickets-unified.png')
         for width in (360,414):
             page.set_viewport_size({'width':width,'height':844})
             assert_full_character_images()
@@ -149,6 +171,15 @@ window.firebase={apps:[{}],firestore:()=>testBackend.firestore};
         page.evaluate("testBackend.data['bets/real-player-device'].member='p1'; testBackend.notify(); location.hash='bet'")
         expect(page.locator('.cheer .character-kart')).to_be_visible()
         assert_full_character_images()
+        expect(page.locator('.self-odds')).to_contain_text('倍')
+        page.get_by_role('button',name='100枚増やす',exact=True).click()
+        expect(page.locator('#amtInput')).to_have_value('200')
+        page.locator('.selfbet').scroll_into_view_if_needed()
+        page.screenshot(path='/tmp/phone-driver-unified.png',full_page=True)
+        page.locator('[data-act="btab"][data-t="stats"]').click()
+        expect(page.locator('[data-act="btab"][data-t="stats"]')).to_have_attribute('aria-current','page')
+        expect(page.locator('.mystats')).to_be_visible()
+        page.screenshot(path='/tmp/phone-stats-unified.png',full_page=True)
         print('PASS: actual app purchase, 360/390/414px containment, driver artwork, and unchanged board',flush=True)
         browser.close()
 

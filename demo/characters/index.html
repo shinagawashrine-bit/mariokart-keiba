@@ -800,11 +800,58 @@ body[data-race="dobe"] .qr .code{background:#fff}
 
 .bet .card-odds.up::after{color:#ff9e91}
 .bet .card-odds.down::after{color:#91baff}
+
+/* スマホ内の見出し・入力・操作・数値表記を共通化する。 */
+.character-phone{--phone-control-height:38px;--phone-heading-size:16px;--phone-odds-size:38px}
+.character-phone .btn{min-height:44px}
+.character-phone .btn.sm{min-height:var(--phone-control-height)}
+.character-phone .btabs button{min-height:var(--phone-control-height)}
+.character-phone .tab{min-height:44px}
+.character-phone .amt{background:var(--carbon);color:#fff;padding:3px;gap:4px;clip-path:var(--cut)}
+.character-phone .amt .btn.sm{min-width:42px;min-height:var(--phone-control-height);padding:6px;font-size:12px;background:#303038;color:#fff;box-shadow:none}
+.character-phone .amt .amtin{min-height:var(--phone-control-height);font-variant-numeric:tabular-nums;color:#fff}
+.character-phone .amt button:focus-visible,.character-phone .betbar button:focus-visible{outline:2px solid var(--yellow);outline-offset:2px}
+.character-phone .card-odds-value{font-size:var(--phone-odds-size)}
+.character-phone .card-odds-value.long{font-size:28px}
+.character-phone .panel>h2,.character-phone .mybox>h2,.character-phone .mpanel>.mt,.character-phone .podds>.pot,.character-phone .msh{font-size:var(--phone-heading-size);line-height:1.5}
+.character-phone .mpanel,.character-phone .podds{padding:12px;border-top:4px solid var(--ink)}
+.character-phone .mpanel>.mt,.character-phone .podds>.pot{background:var(--carbon);color:#fff;margin:-12px -12px 6px;padding:8px 12px;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px}
+.character-phone .mpanel>.mt .muted,.character-phone .podds>.pot .muted{font-size:11px;color:#c7c7cf}
+.character-phone .msh{background:var(--carbon);color:#fff;padding:8px 12px;margin:8px 0 0}
+.character-phone .mybox{margin:4px 0}
+.character-phone .mybox>h2{padding:8px 12px;gap:8px;flex-wrap:wrap}
+.character-phone .mybox>h2>span{font-size:12px;color:#d6d6dc}
+.character-phone .mybox-live .mytix{gap:0}
+.character-phone .mybox-live .tl{padding:8px 12px;border-bottom:1px solid var(--line)}
+.character-phone .mybox-live .tl:last-child{border-bottom:0}
+.character-phone .mybox-live .tl>.row:last-child{flex-shrink:0}
+.character-phone .mybox-live .tl .num{font-size:24px;font-variant-numeric:tabular-nums}
+.character-phone .poi{min-height:44px}
+.character-phone .poi.on{background:#fff0ed}
+.character-phone .poi .num{font-size:28px;font-variant-numeric:tabular-nums}
+.character-phone .poi .num small{font-family:var(--f-body);font-size:11px;font-style:normal;font-weight:700;margin-left:2px}
+.character-phone .mbtn{min-height:var(--phone-control-height)}
+.character-phone .ailine{margin:2px 0 8px;gap:6px;line-height:1.7}
+.character-phone .selfbet .row{gap:10px;align-items:stretch}
+.character-phone .self-odds{font-size:28px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex:1;min-width:116px;background:var(--carbon);padding:6px 10px}
+.character-phone .self-odds>span{color:#c9cdd5;font-size:10px;white-space:nowrap}
+.character-phone .self-odds>strong{color:#fff;font-family:var(--f-num);font-size:var(--phone-odds-size);font-weight:900;font-style:italic;line-height:1;white-space:nowrap}
+.character-phone .self-odds small{font-size:12px;font-family:var(--f-body);font-style:normal;margin-left:2px}
+.character-phone .self-odds.up::after{color:#ff9e91}.character-phone .self-odds.down::after{color:#91baff}
+.character-phone .claim button{min-height:44px}
+.character-phone .mystats .num,.character-phone .myt .num{font-variant-numeric:tabular-nums}
+.character-phone>.note,.character-phone>.warn{background:var(--paper);border-left:4px solid var(--red);padding:12px;line-height:1.8}
+
+.character-phone .me .btn.sm{min-height:24px}
+.character-phone .rbanner{padding-top:6px;padding-bottom:6px}
+
+/* 通知が購入ボタンを覆わないよう、実際の購入パネルの上に出す。 */
+body[data-phone-ui="true"] .toast{bottom:calc(var(--character-betbar-height,var(--actual-betbar-height,0px)) + 12px);font-size:13px;line-height:1.5;padding:10px 18px;width:max-content;max-width:min(560px,calc(100% - 32px));pointer-events:none}
 </style>
 
 <div id="app"></div>
 <div id="ov"></div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script>
 /* ---------------- constants ---------------- */
@@ -1028,7 +1075,7 @@ function isLive(r){ return r && (r.status==="open" || (r.status==="countdown" &&
 function remain(r){ return r && r.status==="countdown" ? Math.max(0, Math.ceil((r.closeAt-now())/1000)) : null; }
 function unit(){ return Math.max(1,settings().unit||1); }
 function clampAmt(a,max){ const U=unit(); let v=Math.max(U,Math.floor(a/U)*U); const mU=Math.floor(max/U)*U; if(mU>=U) v=Math.min(v,mU); return v; }
-function amtButtons(v){ const U=unit(); return `<div class="amt"><button class="btn sm" data-act="amt" data-d="${-U}">−${U}</button><input id="amtInput" class="v amtin" type="number" inputmode="numeric" min="${U}" step="${U}" value="${S.ui.amtRaw!=null?esc(S.ui.amtRaw):v}" data-bind="amt" aria-label="賭ける枚数（押すと入力できます）"><button class="btn sm" data-act="amt" data-d="${U}">+${U}</button><button class="btn sm" data-act="amt" data-d="${U*5}">+${U*5}</button><button class="btn sm" data-act="amt" data-d="${U*10}">+${U*10}</button></div>`; }
+function amtButtons(v){ const U=unit(); return `<div class="amt"><button class="btn sm" data-act="amt" data-d="${-U}" aria-label="${U}枚減らす">−${U}</button><input id="amtInput" class="v amtin" type="number" inputmode="numeric" min="${U}" step="${U}" value="${S.ui.amtRaw!=null?esc(S.ui.amtRaw):v}" data-bind="amt" aria-label="賭ける枚数（押すと入力できます）"><button class="btn sm" data-act="amt" data-d="${U}" aria-label="${U}枚増やす">+${U}</button><button class="btn sm" data-act="amt" data-d="${U*5}" aria-label="${U*5}枚増やす">+${U*5}</button><button class="btn sm" data-act="amt" data-d="${U*10}" aria-label="${U*10}枚増やす">+${U*10}</button></div>`; }
 function mmss(s){ return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; }
 
 /* ---------------- tickets / money ---------------- */
@@ -1572,6 +1619,7 @@ function render(){
   else if(md==="stats") html=renderStats();
   else if(md==="adminhelp") html=renderAdminHelp();
   else html=renderAdmin();
+  document.body.dataset.phoneUi=md==="bet"?"true":"false";
   app.innerHTML=html;
   const bar=app.querySelector('.betbar');
   document.documentElement.style.setProperty('--actual-betbar-height',bar?`${bar.getBoundingClientRect().height}px`:'0px');
@@ -1751,19 +1799,19 @@ function resultHtml(r){
 function myDoc(){ return S.uid ? S.bets[S.uid] : null; }
 function myMember(){ const d=myDoc(); return d && d.member && mem(d.member) ? d.member : null; }
 function renderBet(){
-  if(!S.uid) return `<div class="bet"><div class="warn">投票するには claude.ai にログインして、このページの編集者として招待してもらってください。</div><a class="btn" href="#">戻る</a></div>`;
+  if(!S.uid) return `<div class="bet character-phone"><div class="warn">投票するには claude.ai にログインして、このページの編集者として招待してもらってください。</div><a class="btn" href="#">戻る</a></div>`;
   const me=myMember();
   if(!me || S.ui.claimOpen){
-    if(!members().length) return `<div class="bet">${logo()}<div class="note">まだメンバーが登録されていません。管理画面での登録を待ってね。</div><p style="margin-top:18px"><a class="btn sm" href="#help">遊びかたを見る</a></p></div>`;
-    return `<div class="bet">${logo()}<h2 style="font-size:24px">あなたは誰？</h2><div class="claim">${members().map(m=>`<button data-act="claim" data-id="${m.id}">${esc(m.name)}</button>`).join("")}</div>${me?`<button class="btn ghost" data-act="claimCancel">キャンセル</button>`:""}<p style="margin-top:18px"><a class="btn sm" href="#help">遊びかたを見る</a></p></div>`;
+    if(!members().length) return `<div class="bet character-phone">${logo()}<div class="note">まだメンバーが登録されていません。管理画面での登録を待ってね。</div><p style="margin-top:18px"><a class="btn sm" href="#help">遊びかたを見る</a></p></div>`;
+    return `<div class="bet character-phone">${logo()}<h2 style="font-size:24px">あなたは誰？</h2><div class="claim">${members().map(m=>`<button data-act="claim" data-id="${m.id}">${esc(m.name)}</button>`).join("")}</div>${me?`<button class="btn ghost" data-act="claimCancel">キャンセル</button>`:""}<p style="margin-top:18px"><a class="btn sm" href="#help">遊びかたを見る</a></p></div>`;
   }
   const bal=balances()[me]||0, r=curRace();
   const head=`<div class="me"><div><div class="muted" style="font-size:12px"><span class="demo-label" title="デモ用データ・本番とは連動しません">DEMO</span> <button class="btn sm ghost" data-act="claimOpen" style="padding:0 4px;font-size:12px;text-decoration:underline">変更</button></div><div class="nm">${esc(mname(me))} <button type="button" class="demo-reset" data-demo-reset>最初から</button></div></div><div style="text-align:right"><div class="bal">${coin()}<span>${bal}</span></div></div></div>`;
   const bt=S.ui.btab||"bet";
-  const topTabs=`<div class="btabs">${[["bet","投票"],["stats","成績表"],["help","遊びかた"]].map(([k,l])=>`<button class="${bt===k?"on":""}" data-act="btab" data-t="${k}">${l}</button>`).join("")}${soundBtn()}</div>`;
-  if(bt==="stats") return `<div class="bet" style="padding-bottom:40px">${head}${topTabs}${statsMobile()}</div>`;
-  if(bt==="help") return `<div class="bet" style="padding-bottom:40px">${head}${topTabs}${helpPlayer()}</div>`;
-  if(!r) return `<div class="bet">${head}${topTabs}<div class="note">レースの準備中です。出走表ができるまで待ってね。</div></div>`;
+  const topTabs=`<div class="btabs" role="navigation" aria-label="参加者メニュー">${[["bet","投票"],["stats","成績表"],["help","遊びかた"]].map(([k,l])=>`<button class="${bt===k?"on":""}" data-act="btab" data-t="${k}" aria-current="${bt===k?"page":"false"}">${l}</button>`).join("")}${soundBtn()}</div>`;
+  if(bt==="stats") return `<div class="bet character-phone" style="padding-bottom:40px">${head}${topTabs}${statsMobile()}</div>`;
+  if(bt==="help") return `<div class="bet character-phone" style="padding-bottom:40px">${head}${topTabs}${helpPlayer()}</div>`;
+  if(!r) return `<div class="bet character-phone">${head}${topTabs}<div class="note">レースの準備中です。出走表ができるまで待ってね。</div></div>`;
   const tix=raceTickets(r), O=computeOdds(r,tix); trackFlash(O, r.id);
   const rem=remain(r), live=isLive(r);
   const banner=`<div class="rbanner"><div><div class="row" style="gap:6px">${typePill(r)}${statusPill(r)}</div><h2 style="margin-top:6px">${esc(raceTitle(r))}</h2></div>${r.status==="countdown"&&rem>0?`<div class="t ${rem<=10?"hot":""}" data-cd="${r.id}">${mmss(rem)}</div>`:""}</div>`;
@@ -1776,11 +1824,11 @@ function renderBet(){
     const prize=(settings().prizes[r.type]||[])[0]||0;
     const selfBox = cap>0 ? `<div class="panel selfbet"><h2>自分に賭ける <span class="tag">SELF BET</span></h2>
       <p class="muted" style="margin:0 0 10px;font-size:13px">走る人は自分の単勝だけ買えます（1レース${cap}枚まで）。1着なら払戻と賞金のW取り！</p>
-      ${live?`<div class="row" style="justify-content:space-between">${amtButtons(samt)}<span class="num ${fc("win",me)}">${so.est?'<span class="est">参考</span>':""}${fmtO(so.v)}倍</span></div>
+      ${live?`<div class="row" style="justify-content:space-between">${amtButtons(samt)}<span class="self-odds ${fc("win",me)}"><span>単勝${so.est?" · 参考":""}</span><strong>${fmtO(so.v)}<small>倍</small></strong></span></div>
       <button class="btn go" data-act="betSelf" ${can?"":"disabled"} style="width:100%;margin-top:12px;font-size:18px">自分の単勝を買う</button>
       <p class="hint" style="margin-top:8px">${left?`残り${left}枚まで`:"上限まで買いました"}</p>`:`<p class="muted" style="margin:0">締切済み</p>`}</div>` : "";
-    const selfList = mine.length?`<div class="mytix">${mine.map(t=>`<div class="tl"><span class="row" style="gap:6px"><b>単勝</b>${badge(r,t.sel[0])}<b>自分</b></span><span class="row" style="gap:8px"><b class="num">${t.amt}</b>枚${live&&t.doc===S.uid?`<button class="btn sm" data-act="cancelT" data-id="${t.id}">取消</button>`:""}</span></div>`).join("")}</div>`:"";
-    return `<div class="bet">${head}${topTabs}${finalCard(me)}${banner}<div class="cheer"><div class="pbig c${li}"><span>あなたは</span><b>${li+1}P</b><span>${["赤","青","緑","黄"][li]}のレーン</span></div><div style="width:62%;margin:0 auto">${kart(li,li+1)}</div><h2>出走中！</h2><p class="muted">${li+1}Pのコントローラーで走ってください。他の人には賭けられません。1着で合計の${prize}%が賞金！</p></div>${resultMine(r,me)}${selfBox}${selfList}</div>`;
+    const selfList = mine.length?`<section class="mybox mybox-live"><h2>あなたの馬券 <span>合計 ${mine.reduce((sum,t)=>sum+t.amt,0)}枚</span></h2><div class="mytix">${mine.map(t=>`<div class="tl"><span class="row" style="gap:6px"><b>単勝</b>${badge(r,t.sel[0])}<b>自分</b></span><span class="row" style="gap:8px"><b class="num">${t.amt}</b>枚${live&&t.doc===S.uid?`<button class="btn sm" data-act="cancelT" data-id="${t.id}">取消</button>`:""}</span></div>`).join("")}</div></section>`:"";
+    return `<div class="bet character-phone">${head}${topTabs}${finalCard(me)}${banner}<div class="cheer"><div class="pbig c${li}"><span>あなたは</span><b>${li+1}P</b><span>${["赤","青","緑","黄"][li]}のレーン</span></div><div style="width:62%;margin:0 auto">${kart(li,li+1)}</div><h2>出走中！</h2><p class="muted">${li+1}Pのコントローラーで走ってください。他の人には賭けられません。1着で合計の${prize}%が賞金！</p></div>${resultMine(r,me)}${selfBox}${selfList}</div>`;
   }
   const ms=marketsFor(r);
   if(!ms.includes(S.ui.m)) S.ui.m="win";
@@ -1788,7 +1836,7 @@ function renderBet(){
   const prediction=aiMarks(r);
   const cards=r.runners.map((id,i)=>{
     const o=O.odds.win[id], pos=sel.indexOf(id);
-    return `<button class="rcard c${i} ${pos>=0?"sel":""}" data-act="pick" data-id="${id}" ${live?"":"disabled"}>
+    return `<button class="rcard c${i} ${pos>=0?"sel":""}" data-act="pick" data-id="${id}" aria-pressed="${pos>=0}" ${live?"":"disabled"}>
       ${pos>=0?`<span class="pos">${MK[m].ordered&&n>1?(pos+1)+"着":"✓"}</span>`:""}
       <div class="top"><span class="lanebadge c${i}">${i+1}</span><span class="nm">${esc(mname(id))}</span></div>
       ${formMini(id)}
@@ -1796,7 +1844,7 @@ function renderBet(){
       <div class="o card-odds ${fc("win",id)}"><span class="card-odds-meta"><span>単勝${o.est?" · 参考":""}</span><span class="card-ai ${prediction.thin?"pending":prediction.mk[id]?"ranked":""}" title="通算成績と直近3走をもとにした参考予想">${prediction.thin?"AI準備中":prediction.mk[id]?`AI ${prediction.mk[id]}`:"AI —"}</span></span><strong class="card-odds-value ${fmtO(o.v).length>3?"long":""}">${fmtO(o.v)}<small>倍</small></strong></div>
     </button>`;
   }).join("");
-  const tabs=ms.map(x=>`<button class="tab ${x===m?"on":""}" data-act="tab" data-m="${x}">${MK[x].label}<small>${MK[x].help}</small></button>`).join("");
+  const tabs=ms.map(x=>`<button class="tab ${x===m?"on":""}" data-act="tab" data-m="${x}" aria-pressed="${x===m}">${MK[x].label}<small>${MK[x].help}</small></button>`).join("");
   const done=sel.length===n, k=done?keyOf(m,sel):null, e=done?O.odds[m][k]:null;
   const st=settings(), cap=st.caps[m]||0, usedM=mine.filter(t=>t.m===m).reduce((a,t)=>a+t.amt,0);
   const capLeft=cap?Math.max(0,cap-usedM):Infinity;
@@ -1804,8 +1852,8 @@ function renderBet(){
   S.ui.amt=amt;
   const can=live&&done&&bal>=amt&&amt<=capLeft&&amt>0;
   const why=!live?"受付していません": !done?`${n===1?"1人":n+"人"}選んでね` : bal<amt?"チップが足りません" : amt>capLeft?`${MK[m].label}は1レース${cap}枚まで`:"";
-  const myList=mine.length?`<h2 style="font-size:16px">このレースの馬券</h2><div class="mytix">${mine.map(t=>{ const eo=O.odds[t.m][keyOf(t.m,t.sel)];
-      return `<div class="tl"><span class="row" style="gap:6px"><b>${MK[t.m].label}</b>${selHtml(r,t.m,t.sel,true)}</span><span class="row" style="gap:8px"><b class="num">${t.amt}</b>枚<span class="muted num">${eo?fmtO(eo.v):""}倍</span>${live&&t.doc===S.uid?`<button class="btn sm" data-act="cancelT" data-id="${t.id}">取消</button>`:""}</span></div>`; }).join("")}</div>`:"";
+  const myList=mine.length?`<section class="mybox mybox-live"><h2>あなたの馬券 <span>合計 ${mine.reduce((sum,t)=>sum+t.amt,0)}枚</span></h2><div class="mytix">${mine.map(t=>{ const eo=O.odds[t.m][keyOf(t.m,t.sel)];
+      return `<div class="tl"><span class="row" style="gap:6px"><b>${MK[t.m].label}</b>${selHtml(r,t.m,t.sel,true)}</span><span class="row" style="gap:8px"><b class="num">${t.amt}</b>枚<span class="muted num">${eo?fmtO(eo.v):""}倍</span>${live&&t.doc===S.uid?`<button class="btn sm" data-act="cancelT" data-id="${t.id}">取消</button>`:""}</span></div>`; }).join("")}</div></section>`:"";
   const bar = live ? `<div class="betbar"><div class="in">
       <div class="row1"><span class="selv">${done?`<b>${MK[m].label}</b> ${selHtml(r,m,sel,true)}`:`<span class="muted">${MK[m].label}：${why}</span>`}</span><span class="ov">${e?fmtO(e.v)+"倍":""}</span></div>
       <div class="row2">
@@ -1816,7 +1864,7 @@ function renderBet(){
     </div></div>` : "";
   const closedMsg = !live ? (r.status==="done" ? resultMine(r,me) : `<div class="closedbar"><b>締切！</b><span>大画面で馬券公開中。レースを楽しんで！</span></div>`) : "";
   const nr=races()[S.state.cur+1], nextUp = nr && nr.runners.includes(me) ? `<div class="nextup"><span>次のレースはあなたの出番！</span><span><b>${laneIdx(nr,me)+1}P</b> ${["赤","青","緑","黄"][laneIdx(nr,me)]}</span></div>` : "";
-  return `<div class="bet">${head}${topTabs}${finalCard(me)}${nextUp}${banner}${closedMsg}
+  return `<div class="bet character-phone">${head}${topTabs}${finalCard(me)}${nextUp}${banner}${closedMsg}
     ${live?"":myTicketsClosed(r,me,O,mine)}
     <div class="rcards">${cards}</div>
     ${live?`<div class="tabs">${tabs}</div><p class="hint">${MK[m].ordered&&n>1?"1着から順番にタップ":"タップで選択"}（もう一度タップで解除）</p>`:""}
@@ -1828,7 +1876,7 @@ function renderBet(){
 function phoneOddsList(r,O,m,sel){
   const cur=sel.length===MK[m].n?keyOf(m,sel):null;
   const arr=Object.entries(O.odds[m]).sort((a,b)=>(a[1].v||1e9)-(b[1].v||1e9));
-  return `<div class="podds"><div class="pot">${MK[m].label}の倍率 <span class="muted">（低い順・押すと選べます）</span></div><div class="pol">${arr.map(([k,e])=>`<button class="poi ${k===cur?"on":""}" data-act="pickCombo" data-m="${m}" data-k="${k}"><span class="sel">${selHtml(r,m,e.sel,true)}</span><b class="num ${fc(m,k)}">${e.v?fmtO(e.v):"-"}</b></button>`).join("")}</div></div>`;
+  return `<div class="podds"><div class="pot">${MK[m].label}の倍率 <span class="muted">（低い順・押すと選べます）</span></div><div class="pol">${arr.map(([k,e])=>`<button class="poi ${k===cur?"on":""}" data-act="pickCombo" data-m="${m}" data-k="${k}" aria-pressed="${k===cur}"><span class="sel">${selHtml(r,m,e.sel,true)}</span><b class="num ${fc(m,k)}">${e.v?fmtO(e.v):"-"}<small>倍</small></b></button>`).join("")}</div></div>`;
 }
 /* 自分の馬券の行：種類と選んだ人／枚数×倍率／当たればいくら（結果が出たら的中・はずれ） */
 function myTicketRows(r,mine,O,done){
@@ -1847,7 +1895,7 @@ function myTicketsClosed(r,me,O,mine){
 function marksPanel(r,me){
   const d=S.bets[S.uid]||{}, mk=(d.marks&&d.marks[r.id])||{};
   const ai=aiMarks(r);
-  return `<div class="mpanel"><div class="mt">予想の印 <span class="muted">（オッズ画面に「みんなの本命」が出ます）</span></div><div class="ailine"><span class="ninki ai">AI予想</span> ${ai.thin?"準備中 · 過去の出走データが集まると表示します":`◎${esc(shortName(mname(ai.h)))}　○${esc(shortName(mname(ai.t)))}　▲${esc(shortName(mname(ai.a)))}`}</div>${[["h","◎","本命"],["t","○","対抗"],["a","▲","単穴"]].map(([k,s,l])=>`<div class="mrow"><span class="mk">${s}<small>${l}</small></span>${r.runners.map((id,i)=>`<button class="mbtn c${i} ${mk[k]===id?"on":""}" data-act="mark" data-k="${k}" data-id="${id}">${i+1}</button>`).join("")}</div>`).join("")}</div>`;
+  return `<div class="mpanel"><div class="mt">予想の印 <span class="muted">（オッズ画面に「みんなの本命」が出ます）</span></div><div class="ailine"><span class="ninki ai">AI予想</span> ${ai.thin?"準備中 · 過去の出走データが集まると表示します":`◎${esc(shortName(mname(ai.h)))}　○${esc(shortName(mname(ai.t)))}　▲${esc(shortName(mname(ai.a)))}`}</div>${[["h","◎","本命"],["t","○","対抗"],["a","▲","単穴"]].map(([k,s,l])=>`<div class="mrow"><span class="mk">${s}<small>${l}</small></span>${r.runners.map((id,i)=>`<button class="mbtn c${i} ${mk[k]===id?"on":""}" data-act="mark" data-k="${k}" data-id="${id}" aria-pressed="${mk[k]===id}">${i+1}</button>`).join("")}</div>`).join("")}</div>`;
 }
 function resultMine(r,me){
   if(r.status!=="done"||!r.settle) return "";

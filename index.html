@@ -717,10 +717,11 @@ const STATUS_LABEL = {wait:"待機", open:"受付中", countdown:"締切まも�
 const CIRC = ["①","②","③","④"];
 
 /* ---------------- state ---------------- */
+function defaultUi(){ return { m:"win", sel:[], amt:100, order:[], form:{}, proxyMember:"", pm:"win", psel:[], pamt:100, confirm:null, perPerson:null, claimOpen:false }; }
 const S = {
   db:null, user:null, uid:null, isOwner:false, ready:false, noDb:false,
   state:null, ledger:null, bets:{}, roster:null, history:null, ps:{},
-  ui:{ m:"win", sel:[], amt:100, order:[], form:{}, proxyMember:"", pm:"win", psel:[], pamt:100, confirm:null, perPerson:null, claimOpen:false },
+  ui:defaultUi(),
   prevOdds:{}, flash:{}, closing:false, lastOverlayKey:"",
 };
 function defaultState(){ return {members:[], races:[], cur:-1, settings:clone(DEFAULT_SETTINGS), gameId:rid()}; }
@@ -1479,7 +1480,7 @@ function render(){
   document.querySelectorAll('.admin [data-pending-key]').forEach(el=>{ if((S.ui.pendingAdmin||{})[el.dataset.pendingKey]) el.disabled=true; });
   if(S.ui.ending) document.querySelectorAll('[data-act="endGame"]').forEach(el=>{ el.disabled=true; el.textContent="保存中…"; });
   if(S.ui.ticketPending) document.querySelectorAll('[data-act="bet"], [data-act="betSelf"], [data-act="pbet"], [data-act="cancelT"]').forEach(el=>{ el.disabled=true; });
-  if(md==="admin"){ const seen={}; document.querySelectorAll("#app .admin .panel > h2").forEach(h=>{ const t=(h.childNodes[0]&&h.childNodes[0].textContent||"").trim(); if(!t) return; seen[t]=(seen[t]||0)+1; const k=seen[t]>1?t+seen[t]:t;
+  if(md==="admin"){ const seen={}; document.querySelectorAll("#app .admin .panel > h2:not([data-static])").forEach(h=>{ const t=(h.childNodes[0]&&h.childNodes[0].textContent||"").trim(); if(!t) return; seen[t]=(seen[t]||0)+1; const k=seen[t]>1?t+seen[t]:t;
     h.dataset.act="foldPanel"; h.dataset.k=k; h.classList.add("foldh"); h.setAttribute("role","button"); h.setAttribute("aria-expanded",String(!(S.ui.foldH||{})[k])); h.tabIndex=0;
     if((S.ui.foldH||{})[k]) h.parentElement.classList.add("folded"); }); }
   const cr=S.ready&&S.state&&!S.noDb?curRace():null;
@@ -1858,7 +1859,7 @@ function renderAdmin(){
     const hint=!r?"出走表を作成してください":r.status==="done"?"次のレースへ進みましょう":r.status==="closed"?"レース終了後、着順を入力":r.status==="countdown"?"締切まで、投票を待ちましょう":"投票が集まったら、締切を開始";
     content=`<div class="agrid"><div class="acol">${adminRace()}${adminRaces()}${adminProxy()}</div><div class="acol">${adminAudience()}<div class="panel admin-stage-hint"><span class="muted" style="font-size:12px">次の操作</span><h3>${hint}</h3><p>${r&&r.status==="closed"?"1着から順に選んで確定します。最後の1人は自動で補完します。":"進行に合わせて操作が切り替わります。"}</p></div>${adminDisclosure("players","チップ調整・参加者の変更",adminMembers())}${adminDisclosure("links","参加用URL・画面リンク",adminUrls())}</div></div>`;
   }else{
-    const nextDay=S.state.ended?`<div class="panel admin-newday"><h2>次の開催を準備</h2><p class="muted">今日の参加者・チップ・出走表を初期化します。名簿と通算成績は残ります。</p>${S.ui.confirm==="newday"?`<p class="warn">必要なCSVは保存しましたか？ 当日のデータを初期化します。</p><button class="btn go" data-act="endClose">初期化して準備へ</button><button class="btn" data-act="cancelConfirm">やめる</button>`:`<button class="btn" data-act="askNewDay">次の開催を準備する</button>`}</div>`:"";
+    const nextDay=S.state.ended?`<div class="panel admin-newday"><h2 data-static>次の開催を準備</h2><p class="muted">今日の参加者・チップ・出走表を初期化します。名簿と通算成績は残ります。</p><button class="btn go" data-act="askNewDay">次の開催を準備する</button></div>`:"";
     content=`<div class="agrid"><div class="acol">${adminFinal()}${betTable()}<a class="btn" href="#stats">全員の通算成績を開く</a></div><div class="acol">${adminData(true)}${adminHouse()}${nextDay}</div></div>`;
   }
   return `<div class="admin wrap"><div class="topnav">${logo()}<div class="links"><a class="btn sm" href="#board">オッズ画面</a><a class="btn sm" href="#bet">投票画面</a><a class="btn sm" href="#stats">成績表</a><a class="btn sm go" href="#adminhelp">管理者マニュアル</a></div></div><div class="checker"></div><nav class="admin-phases" aria-label="大会の進行">${phases.map(([key,num,title,description])=>`<button class="${key===phase?"active":""}" data-act="adminPhase" data-phase="${key}" aria-current="${key===phase?"page":"false"}"><span>${num}</span><b>${title}</b><small>${description}</small></button>`).join("")}</nav>${content}${endPopHtml()}</div>`;
@@ -1990,12 +1991,18 @@ function adminData(expanded=false){
 }
 /* 終了後：全員の最終チップ。閉じる操作ではデータを変更しない。 */
 function endPopHtml(){
+  if(S.state.ended && S.ui.confirm==="newday") return `<div class="endpop"><div class="endbox" role="dialog" aria-modal="true" aria-labelledby="newday-title">
+    <h2 id="newday-title">次の開催を準備しますか？</h2>
+    <p>今日の参加者・チップ・出走表を初期化して、準備画面に戻ります。名簿と通算成績は残ります。</p>
+    <p class="warn">必要なCSVは先に保存してください。</p>
+    <div class="row"><button class="btn go" data-act="endClose" ${S.ui.resetting?"disabled":""}>${S.ui.resetting?"準備中…":"初期化して準備へ"}</button><button class="btn" data-act="cancelConfirm" ${S.ui.resetting?"disabled":""}>やめる</button></div>
+  </div></div>`;
   if(!S.state.ended || S.ui.endDismissed===S.state.ended) return "";
   const rows=finalRows();
   return `<div class="endpop"><div class="endbox"><button class="endx" data-act="endDismiss" aria-label="成績表を閉じる">×</button>
     <h2>本日の最終チップ</h2><div class="scroll"><table class="stbl"><tr><th>順位</th><th style="text-align:left">名前</th><th>配られた</th><th>最終</th><th>増減</th></tr>
     ${rows.map((x,i)=>`<tr class="${i===0?"rk1":""}"><td class="num">${i+1}</td><td style="text-align:left"><b>${esc(mname(x.id))}</b></td><td class="num">${x.given}</td><td class="num">${x.bal}</td><td class="num ${x.net>0?"plus":x.net<0?"minus":""}">${x.net>0?"+":""}${x.net}</td></tr>`).join("")}</table></div>
-    <p class="muted" style="font-size:12px;margin:10px 0 0">大画面とスマホに表彰式が出ています。閉じても今日のデータは残ります。次回は「終了後」の「次の開催を準備」から始められます。</p></div></div>`;
+    <p class="muted" style="font-size:12px;margin:10px 0 0">大画面とスマホに表彰式が出ています。閉じても今日のデータは残ります。次回は「終了後」の「次の開催を準備」から始められます。</p><button class="btn go" data-act="askNewDay" style="margin-top:16px">次の開催を準備する</button></div></div>`;
 }
 
 /* ---------------- actions ---------------- */
@@ -2003,7 +2010,7 @@ function toast(msg){ const t=document.getElementById("toast"); t.innerHTML=`<div
 const A={
   adminPhase(d){ if(!["prep","live","finish"].includes(d.phase)) return; S.ui.adminPhase=d.phase; render(); },
   endDismiss(){ S.ui.endDismissed=S.state.ended; render(); },
-  askNewDay(){ S.ui.confirm="newday"; render(); },
+  askNewDay(){ if(!S.state.ended||S.ui.resetting) return; S.ui.endDismissed=S.state.ended; S.ui.confirm="newday"; render(); },
   claim(d){ const id=d.id; S.ui.claimOpen=false; mutateBets(S.uid, b=>{ b.member=id; b.tickets=b.tickets||[]; }); },
   sound(){ SFX.on=!SFX.on; try{ localStorage.setItem("mk_sound",SFX.on?"1":"0"); }catch(e){} if(SFX.on){ audio(); play("coin"); } render(); },
   celClose(){ S.cel=null; render(); },
@@ -2209,17 +2216,26 @@ const A={
       return ok;
     }finally{ S.ui.ending=false; render(); }
   },
-  endClose(){
-    if(S.ui.confirm!=="newday"||!S.state.ended) return Promise.resolve(false);
+  async endClose(){
+    if(S.ui.confirm!=="newday"||!S.state.ended||S.ui.resetting) return false;
     const ended=S.state.ended, keep=settings(); delete keep.learned;
-    return mutateState(s=>{
-      if(s.ended!==ended) throw writeError("開催データが更新されました。もう一度確認してください");
-      Object.assign(s,defaultState()); s.settings=keep; s.ended=null; s.ceremony=null; s.round=1; s.newRound=false;
-    }).then(ok=>{ if(ok){ S.ui.confirm=null; S.ui.endDismissed=null; S.ui.adminPhase="prep"; render(); toast("次の開催を準備できます"); } return ok; });
+    S.ui.resetting=true; render();
+    try{
+      const ok=await mutateState(s=>{
+        if(s.ended!==ended) throw writeError("開催データが更新されました。もう一度確認してください");
+        Object.assign(s,defaultState()); s.settings=keep; s.ended=null; s.ceremony=null; s.round=1; s.newRound=false;
+      });
+      if(ok){
+        S.ui=defaultUi(); S.ui.adminPhase="prep"; S.cel=null;
+        S.prevOdds={}; S.flash={}; S.lastOverlayKey="";
+        render(); window.scrollTo(0,0); toast("次の開催を準備できます");
+      }
+      return ok;
+    }finally{ S.ui.resetting=false; render(); }
   },
   cerPhoneClose(){ S.ui.cerClosed=S.state.ended; S.lastOverlayKey=""; render(); },
   askReset(){ S.ui.confirm="reset"; render(); },
-  cancelConfirm(){ S.ui.confirm=null; render(); },
+  cancelConfirm(){ if(S.ui.resetting) return; S.ui.confirm=null; render(); },
   reset(){ S.ui.confirm=null; const keep=settings(); mutateState(s=>{ Object.assign(s, defaultState()); s.settings=keep; }); toast("リセットしました"); },
   csvT(){ exportCSV("tickets"); },
   csvR(){ exportCSV("races"); },

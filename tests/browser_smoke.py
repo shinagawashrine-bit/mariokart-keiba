@@ -110,6 +110,38 @@ window.firebase={apps:[{}],firestore:()=>testBackend.firestore};
         expect(page.locator('.endpop')).to_have_count(0)
         print('PASS: closing final table preserves event data')
 
+        # A fresh event must reopen participant entry even if it was folded before.
+        page.locator('[data-act="adminPhase"][data-phase="prep"]').click()
+        page.locator('.admin .panel > h2').filter(has_text='メンバー').first.click()
+        page.locator('[data-act="adminPhase"][data-phase="finish"]').click()
+        before=page.evaluate("JSON.stringify([S.roster,S.history])")
+        page.locator('[data-act="askNewDay"]').click()
+        expect(page.get_by_role('dialog')).to_be_visible()
+        page.get_by_role('dialog').locator('[data-act="cancelConfirm"]').click()
+        assert page.evaluate('S.state.members.length')==5
+        page.locator('[data-act="askNewDay"]').click()
+        page.evaluate("testBackend.fail=Object.assign(new Error('Test denial'),{code:'permission-denied'})")
+        page.get_by_role('dialog').locator('[data-act="endClose"]').click()
+        expect(page.locator('#toast')).to_contain_text('権限')
+        expect(page.get_by_role('dialog')).to_be_visible()
+        assert page.evaluate('S.state.members.length')==5
+        page.get_by_role('dialog').locator('[data-act="endClose"]').click()
+        page.wait_for_function("S.state.ended===null && S.ui.adminPhase==='prep'")
+        expect(page.locator('#newName')).to_be_visible()
+        assert page.evaluate('window.scrollY')==0
+        assert page.evaluate("JSON.stringify([S.roster,S.history])")==before
+        expect(page.get_by_role('dialog')).to_have_count(0)
+        # The end-of-day popup also leads directly to the reset confirmation.
+        page.locator('[data-act="adminPhase"][data-phase="finish"]').click()
+        page.locator('[data-act="askEnd"][data-s="nosave"]').click()
+        page.locator('[data-act="endGame"]').click()
+        page.locator('.endpop [data-act="askNewDay"]').click()
+        expect(page.get_by_role('dialog')).to_be_visible()
+        page.get_by_role('dialog').locator('[data-act="endClose"]').click()
+        page.wait_for_function("S.state.ended===null && S.ui.adminPhase==='prep'")
+        expect(page.locator('#newName')).to_be_visible()
+        print('PASS: next event opens fresh preparation with participant entry visible')
+
         for route in ('bet', 'board', 'stats'):
             page.evaluate('(route)=>location.hash=route', route)
             page.wait_for_timeout(100)

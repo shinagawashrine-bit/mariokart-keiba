@@ -15,7 +15,7 @@ async function app(b=backend()) {
   const context = vm.createContext({
     console:{error(){}}, messages,
     location:{origin:'http://test.invalid',pathname:'/',hash:'#bet'},
-    document:{addEventListener(){}}, addEventListener(){},
+    document:{addEventListener(){}}, addEventListener(){}, scrollTo(){},
     localStorage:{getItem(){return null;},setItem(){}},
     MK_CONFIG:{firebase:{apiKey:'local-test'}},
     firebase:{apps:[{}],firestore:()=>b.firestore},
@@ -201,13 +201,33 @@ test('closing the final-chip table preserves all event data',async()=>{
 test('new-event reset requires confirmation; failed reset retains the event',async()=>{
   const a=await app(); a.S.state.ended=12345; a.b.data['game/state']=clone(a.S.state);
   assert.equal(await a.A.endClose(),false);
-  a.S.ui.confirm='newday'; offline(a);
+  a.S.ui.foldH={'メンバー':true}; a.S.ui.form.newName='前回の入力';
+  a.S.ui.order=['p1'];
+  const historyBefore=clone(a.b.data['game/history']);
+  a.A.askNewDay(); offline(a);
   assert.equal(await a.A.endClose(),false);
   assert.equal(a.S.state.members.length,5);
   assert.equal(await a.A.endClose(),true);
   assert.equal(a.S.state.members.length,0);
   assert.equal(a.S.state.ended,null);
   assert.equal(a.S.ui.adminPhase,'prep');
+  assert.equal(a.S.ui.foldH,undefined);
+  assert.deepEqual(clone(a.S.ui.form),{});
+  assert.deepEqual(clone(a.S.ui.order),[]);
+  assert.deepEqual(a.b.data['game/history'],historyBefore);
+});
+
+test('double-clicking new-event reset commits once and cancel cannot interrupt it',async()=>{
+  const a=await app(); a.S.state.ended=12345; a.b.data['game/state']=clone(a.S.state);
+  a.A.askNewDay();
+  let release; a.b.gate=new Promise(resolve=>release=resolve);
+  const first=a.A.endClose();
+  assert.equal(await a.A.endClose(),false);
+  a.A.cancelConfirm();
+  assert.equal(a.S.ui.confirm,'newday');
+  assert.equal(a.S.state.members.length,5);
+  release(); assert.equal(await first,true);
+  assert.equal(a.b.commits,1);
 });
 
 test('failed CSV export does not silently end the event',async()=>{

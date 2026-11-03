@@ -284,3 +284,81 @@ test('creating the schedule moves the host from setup to live control',async()=>
   assert.equal(a.b.data['game/state'].races.length,3);
   assert.equal(a.b.data['game/state'].races[0].status,'open');
 });
+
+test('one member can buy from only one phone; a second phone is rejected',async()=>{
+  const b=backend();
+  const a=await app(b);
+  assert.equal(await a.A.bet(),true);
+  assert.equal(b.data['game/claims'].m.p5,'device');
+  // 別の端末が同じ名前で買おうとしても、記録された端末以外は拒否される。
+  b.data['bets/other']={member:'p5',tickets:[]};
+  const c=await app(b); c.S.uid='other'; c.S.bets={other:clone(b.data['bets/other'])};
+  assert.equal(await c.A.bet(),false);
+  assert.match(c.messages.at(-1),/別のスマホ/);
+  assert.equal(b.data['bets/other'].tickets.length,0);
+});
+
+test('choosing a name moves it to this phone and the old phone loses it',async()=>{
+  const b=backend();
+  const a=await app(b); assert.equal(await a.A.bet(),true);
+  b.data['bets/other']={tickets:[]};
+  const c=await app(b); c.S.uid='other'; c.S.bets={other:clone(b.data['bets/other'])};
+  await c.A.claim({id:'p5'}); await new Promise(setImmediate);
+  assert.equal(b.data['game/claims'].m.p5,'other');
+  assert.equal(b.data['bets/other'].member,'p5');
+  a.S.ui.sel=['p1']; assert.equal(await a.A.bet(),false);
+});
+
+test('result uses every ticket on the server, including ones this host has not received',async()=>{
+  const a=await app(); closed(a);
+  // 管理端末に届いていない票（締切直前に入った票）
+  a.b.data['bets/late']={member:'p5',tickets:[{id:'t9',race:'r1',member:'p5',m:'win',sel:['p1'],amt:100,t:Date.now()-1000}]};
+  assert.equal(await a.A.confirmResult(),true);
+  const settle=a.b.data['game/state'].races[0].settle;
+  assert.equal(settle.hits.length,1);
+  assert.ok(settle.payouts.p5>0);
+});
+
+test('a phone that missed the end notice cannot buy after the event ended',async()=>{
+  const a=await app(); a.b.data['game/state'].ended=Date.now();
+  assert.equal(await a.A.bet(),false);
+  assert.match(a.messages.at(-1),/受付は終了/);
+  assert.equal(a.b.data['bets/device'].tickets.length,0);
+});
+
+test('adding a member already added on another device does not duplicate it',async()=>{
+  const a=await app();
+  a.b.data['game/state'].members.push({id:'p6',name:'山田'});
+  a.S.ui.form.newName='山田';
+  await a.A.addMember(); await new Promise(setImmediate); await new Promise(setImmediate);
+  assert.equal(a.b.data['game/state'].members.filter(m=>m.name==='山田').length,1);
+  assert.match(a.messages.at(-1),/同じ名前/);
+});
+
+test('phone purchase and host proxy purchase at the same time cannot exceed the balance',async()=>{
+  for(const proxyFirst of [false,true]){
+    const b=backend();
+    const phone=await app(b); assert.equal(await phone.A.bet(),true);   // この端末を p5 のスマホとして記録（残り900枚）
+    const host=await app(b); host.S.uid='host'; host.S.bets=clone({device:b.data['bets/device']}); host.S.claims=clone(b.data['game/claims']);
+    phone.S.ui.sel=['p1']; phone.S.ui.amt=600;
+    let release; b.gate=new Promise(r=>release=r);
+    const buyPhone=()=>phone.A.bet();
+    const buyProxy=()=>host.context.saveTicket('proxy',{id:'x1',race:'r1',member:'p5',m:'win',sel:['p2'],amt:600},false).then(ok=>ok);
+    const runs=proxyFirst?[buyProxy(),buyPhone()]:[buyPhone(),buyProxy()];
+    await new Promise(setImmediate); release(); const res=await Promise.all(runs);
+    const spent=[...(b.data['bets/device'].tickets||[]),...((b.data['bets/proxy']||{}).tickets||[])].filter(t=>t.member==='p5').reduce((a,t)=>a+t.amt,0);
+    assert.equal(res.filter(Boolean).length,1,`proxyFirst=${proxyFirst}`);
+    assert.ok(spent<=1000,`spent ${spent}`);
+  }
+});
+
+test('proxy purchase is retried safely when the member starts using a phone at the same moment',async()=>{
+  const b=backend();
+  const host=await app(b); host.S.uid='host'; host.S.claims=null;
+  const phone=await app(b); phone.S.ui.amt=600;
+  let release; b.gate=new Promise(r=>release=r);
+  const p1=phone.A.bet(), p2=host.context.saveTicket('proxy',{id:'x1',race:'r1',member:'p5',m:'win',sel:['p2'],amt:600},false);
+  await new Promise(setImmediate); release(); const res=await Promise.all([p1,p2]);
+  const spent=[...(b.data['bets/device'].tickets||[]),...((b.data['bets/proxy']||{}).tickets||[])].reduce((a,t)=>a+t.amt,0);
+  assert.ok(spent<=1000,`spent ${spent}`); assert.equal(res.filter(Boolean).length,1);
+});

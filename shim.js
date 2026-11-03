@@ -41,6 +41,8 @@
     return {
       path: c.path,
       doc: function(id){ return wrapDoc(id ? c.doc(id) : c.doc()); },
+      // キャッシュではなくサーバーの最新を読む（払い戻し計算の直前に使う）
+      get: function(){ return c.get({ source: "server" }).then(function(q){ var d = q.docs.map(snap); return { docs: d, size: d.length, empty: !d.length }; }); },
       onSnapshot: function(n, e){ return c.onSnapshot(function(q){ var d = q.docs.map(snap); n({ docs: d, size: d.length, empty: !d.length }); }, err(e)); }
     };
   }

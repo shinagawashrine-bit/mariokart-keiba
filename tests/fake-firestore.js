@@ -27,7 +27,7 @@ function createTestFirestore() {
     doc: p => ({path:p, get:async()=>read(p), onSnapshot:fn=>{listeners.push([p,fn]); queueMicrotask(()=>fn(read(p))); return ()=>{};}, set:async v=>{
       if(b.gate) await b.gate; failIfRequested(); write(p,v); notify();
     }}),
-    collection: () => ({onSnapshot:fn=>{collections.push(fn); queueMicrotask(notify); return ()=>{};}}),
+    collection: () => ({onSnapshot:fn=>{collections.push(fn); queueMicrotask(notify); return ()=>{};}, get:async()=>{ if(b.gate) await b.gate; failIfRequested(); return {docs:Object.keys(data).filter(p=>p.startsWith('bets/')).map(p=>read(p))}; }}),
     runTransaction: async fn => {
       for(let attempt=0; attempt<10; attempt++) {
         b.attempts++;

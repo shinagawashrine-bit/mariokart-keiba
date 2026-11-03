@@ -1154,10 +1154,25 @@ async function adminTask(key,fn,onSuccess){
   finally{ delete pending[key]; render(); }
 }
 function saveTicket(docId, ticket, self){
-  const path="bets/"+docId;
-  return mutateDocuments(["game/state",path],docs=>{
+  const path="bets/"+docId, phone=docId!=="proxy";
+  // 代理購入では、本人が使っているスマホの票も一緒に読む（同時に買われても残高を超えないように）。
+  const owner0=phone?null:(claimsMap()[ticket.member]||null);
+  const other=phone?"bets/proxy":(owner0?"bets/"+owner0:null);
+  const paths=["game/state","game/claims",path].concat(other?[other]:[]);
+  return mutateDocuments(paths,docs=>{
     const state=docs["game/state"], r=state&&state.races[state.cur];
-    if(!r || r.id!==ticket.race || !isLive(r)) throw writeError("受付は終了しました。最新のレースを確認してください");
+    if(!state || state.ended || !r || r.id!==ticket.race || !isLive(r)) throw writeError("受付は終了しました。最新のレースを確認してください");
+    // 1人の名前は1台の端末だけで買える（未登録なら、この端末で使うと記録する）。
+    let claims=null;
+    if(phone){
+      claims=clone(docs["game/claims"]||{}); if(claims.gameId!==state.gameId){ claims.gameId=state.gameId; claims.m={}; } claims.m=claims.m||{};
+      const owner=claims.m[ticket.member];
+      if(owner && owner!==docId) throw writeError("この名前は別のスマホで使われています。名前を選び直してください");
+      if(owner) claims=null; else claims.m[ticket.member]=docId;   // 変わらないときは書き込まない
+    }else{
+      const c=docs["game/claims"], owner=c&&c.gameId===state.gameId&&c.m ? (c.m[ticket.member]||null) : null;
+      if(owner!==owner0) throw writeError("この人のスマホが切り替わりました。もう一度押してください");
+    }
     if(!Number.isSafeInteger(ticket.amt) || ticket.amt<unit() || ticket.amt%unit()) throw writeError(`${unit()}枚単位で賭けてね`);
     if(!MK[ticket.m] || !marketsFor(r).includes(ticket.m) || ticket.sel.length!==MK[ticket.m].n || new Set(ticket.sel).size!==ticket.sel.length || ticket.sel.some(id=>!r.runners.includes(id))) throw writeError("買い目を選び直してください");
     if(!state.members.some(m=>m.id===ticket.member&&!m.left)) throw writeError("参加者を選び直してください");
@@ -1165,16 +1180,21 @@ function saveTicket(docId, ticket, self){
     if(runner && !(ticket.m==="win" && ticket.sel[0]===ticket.member)) throw writeError("出走中は自分への単勝だけ購入できます");
     const next=clone(docs[path]||{tickets:[]});
     // 同じ投票文書を別端末が更新していた場合も、最新の票で再判定する。
-    const previous=S.bets[docId]; S.bets[docId]=next;
+    // 残高は、本人のスマホと代理入力の両方の最新の票で判定する（ほかの端末はこの名前で買えない）。
+    const otherId=other&&other.slice(5), previous=S.bets[docId], prevOther=otherId&&S.bets[otherId]; S.bets[docId]=next;
+    if(otherId){ if(docs[other]) S.bets[otherId]=docs[other]; else delete S.bets[otherId]; }
     try{
       if((balances()[ticket.member]||0)<ticket.amt) throw writeError("チップが足りません");
       const st=settings(), cap=(self||runner)?st.caps.self:st.caps[ticket.m];
       const used=raceTickets(r).filter(t=>t.member===ticket.member&&t.m===ticket.m).reduce((a,t)=>a+t.amt,0);
       if(cap && used+ticket.amt>cap) throw writeError(`${MK[ticket.m].label}は1レース${cap}枚までです`);
-    }finally{ if(previous===undefined) delete S.bets[docId]; else S.bets[docId]=previous; }
-    if(docId!=="proxy") next.member=ticket.member;
+    }finally{
+      if(previous===undefined) delete S.bets[docId]; else S.bets[docId]=previous;
+      if(otherId){ if(prevOther===undefined) delete S.bets[otherId]; else S.bets[otherId]=prevOther; }
+    }
+    if(phone) next.member=ticket.member;
     (next.tickets=next.tickets||[]).push({...ticket,t:now()});
-    return {[path]:next};
+    return phone&&claims?{[path]:next,"game/claims":claims}:{[path]:next};
   });
 }
 
@@ -1651,13 +1671,16 @@ function resultHtml(r){
 
 /* ===== BET (phone) ===== */
 function myDoc(){ return S.uid ? S.bets[S.uid] : null; }
-function myMember(){ const d=myDoc(); return d && d.member && mem(d.member) ? d.member : null; }
+/* 1人の名前は1台のスマホだけ。game/claims に「名前→端末」を大会ごとに記録する */
+function claimsMap(){ const c=S.claims; return c && S.state && c.gameId===S.state.gameId ? (c.m||{}) : {}; }
+function claimedElsewhere(id){ const o=claimsMap()[id]; return !!(o && o!==S.uid); }
+function myMember(){ const d=myDoc(); return d && d.member && mem(d.member) && !claimedElsewhere(d.member) ? d.member : null; }
 function renderBet(){
   if(!S.uid) return `<div class="bet character-phone"><div class="warn">投票するには claude.ai にログインして、このページの編集者として招待してもらってください。</div><a class="btn" href="#">戻る</a></div>`;
   const me=myMember();
   if(!me || S.ui.claimOpen){
     if(!members().length) return `<div class="bet character-phone">${logo()}<div class="note">まだメンバーが登録されていません。管理画面での登録を待ってね。</div><p style="margin-top:18px"><a class="btn sm" href="#help">遊びかたを見る</a></p></div>`;
-    return `<div class="bet character-phone">${logo()}<h2 style="font-size:24px">あなたは誰？</h2><div class="claim">${members().map(m=>`<button data-act="claim" data-id="${m.id}">${esc(m.name)}</button>`).join("")}</div>${me?`<button class="btn ghost" data-act="claimCancel">キャンセル</button>`:""}<p style="margin-top:18px"><a class="btn sm" href="#help">遊びかたを見る</a></p></div>`;
+    return `<div class="bet character-phone">${logo()}<h2 style="font-size:24px">あなたは誰？</h2>${(()=>{ const d=myDoc(); return d&&d.member&&mem(d.member)&&claimedElsewhere(d.member)?`<div class="note">「${esc(mname(d.member))}」は別のスマホで選ばれたので、このスマホでは使えなくなりました。1人の名前は1台のスマホだけで使えます。</div>`:""; })()}<div class="claim">${members().map(m=>`<button data-act="claim" data-id="${m.id}">${esc(m.name)}${claimedElsewhere(m.id)?'<small style="display:block;font-size:11px;opacity:.7">別のスマホで使用中</small>':""}</button>`).join("")}</div>${me?`<button class="btn ghost" data-act="claimCancel">キャンセル</button>`:""}<p style="margin-top:18px"><a class="btn sm" href="#help">遊びかたを見る</a></p></div>`;
   }
   const bal=balances()[me]||0, r=curRace();
   const head=`<div class="me"><div><div class="muted" style="font-size:12px">PLAYER <button class="btn sm ghost" data-act="claimOpen" style="padding:0 4px;font-size:12px;text-decoration:underline">変更</button></div><div class="nm">${esc(mname(me))}</div></div><div style="text-align:right"><div class="bal">${coin()}<span>${bal}</span></div></div></div>`;
@@ -2011,7 +2034,13 @@ const A={
   adminPhase(d){ if(!["prep","live","finish"].includes(d.phase)) return; S.ui.adminPhase=d.phase; render(); },
   endDismiss(){ S.ui.endDismissed=S.state.ended; render(); },
   askNewDay(){ if(!S.state.ended||S.ui.resetting) return; S.ui.endDismissed=S.state.ended; S.ui.confirm="newday"; render(); },
-  claim(d){ const id=d.id; S.ui.claimOpen=false; mutateBets(S.uid, b=>{ b.member=id; b.tickets=b.tickets||[]; }); },
+  claim(d){ const id=d.id, uid=S.uid, path="bets/"+uid; S.ui.claimOpen=false;
+    mutateDocuments(["game/state","game/claims",path],docs=>{
+      const st=docs["game/state"]; if(!st||!st.members.some(m=>m.id===id&&!m.left)) throw writeError("参加者を選び直してください");
+      const c=clone(docs["game/claims"]||{}); if(c.gameId!==st.gameId){ c.gameId=st.gameId; c.m={}; } c.m=c.m||{}; c.m[id]=uid;
+      const b=clone(docs[path]||{tickets:[]}); b.member=id; b.tickets=b.tickets||[];
+      return {"game/claims":c, [path]:b};
+    }); },
   sound(){ SFX.on=!SFX.on; try{ localStorage.setItem("mk_sound",SFX.on?"1":"0"); }catch(e){} if(SFX.on){ audio(); play("coin"); } render(); },
   celClose(){ S.cel=null; render(); },
   pickCombo(d){ const r=curRace(); if(!r) return; const e=computeOdds(r,raceTickets(r)).odds[d.m][d.k]; if(!e) return; S.ui.m=d.m; S.ui.sel=e.sel.slice(); render(); },
@@ -2062,9 +2091,14 @@ const A={
   addMember(){ const name=(S.ui.form.newName||"").trim(); if(!name) return; if(members().some(m=>m.name===name)){ toast("同じ名前がいます"); return; }
     const p=roster().find(x=>x.name===name), id=p?p.id:"p"+rid();
     S.ui.form.newName="";
-    if(!p) mutateRoster(r=>{ r.players.push({id, name}); });
-    let re=false; mutateState(s=>{ s.members.push({id, name, tb:Math.random()}); re=rescheduleRest(s); }).then(ok=>{ if(ok&&re) toast(`${name}が途中参加。残りの出走表を組み直しました`); });
-    toast(p?`${name}（登録済み）を追加`:`${name}を追加して名簿に保存しました`); },
+    // 重複の確認は保存時の最新データで行い、成功してから通知する。
+    let re=false, dup=false;
+    mutateState(s=>{ re=false; dup=s.members.some(m=>m.id===id||m.name===name); if(dup) return; s.members.push({id, name, tb:Math.random()}); re=rescheduleRest(s); }).then(async ok=>{
+      if(!ok) return;
+      if(dup){ toast("同じ名前がいます"); return; }
+      if(!p){ const saved=await mutateRoster(r=>{ if(!r.players.some(x=>x.id===id||x.name===name)) r.players.push({id, name}); }); if(!saved) return; }
+      toast(re?`${name}が途中参加。残りの出走表を組み直しました`:p?`${name}（登録済み）を追加`:`${name}を追加して名簿に保存しました`);
+    }); },
   renameStart(d){ S.ui.editName=d.id; S.ui.form["rename_"+d.id]=mname(d.id); render(); const el=document.getElementById("rename_"+d.id); if(el){ el.focus(); el.select(); } },
   renameCancel(){ if(S.ui.editName) delete S.ui.form["rename_"+S.ui.editName]; S.ui.editName=null; render(); },
   renameSave(d){ const id=d.id, name=(S.ui.form["rename_"+id]||"").trim(); if(!name){ toast("名前を入れてね"); return; }
@@ -2074,8 +2108,8 @@ const A={
     mutateState(s=>{ const m=s.members.find(x=>x.id===id); if(m) m.name=name; });
     if(roster().some(p=>p.id===id)) mutateRoster(r=>{ const p=r.players.find(x=>x.id===id); if(p) p.name=name; });
     toast(`名前を「${name}」に変えました`); },
-  addRoster(d){ const p=roster().find(x=>x.id===d.id); if(!p||members().some(m=>m.id===p.id)) return; let re=false; mutateState(s=>{ s.members.push({id:p.id, name:p.name, tb:Math.random()}); re=rescheduleRest(s); }).then(ok=>{ if(ok&&re) toast(`${p.name}が途中参加。残りの出走表を組み直しました`); }); },
-  addAllRoster(){ const add=roster().filter(p=>!members().some(m=>m.id===p.id)); if(!add.length) return; mutateState(s=>{ add.forEach(p=>s.members.push({id:p.id, name:p.name, tb:Math.random()})); rescheduleRest(s); }); toast(`${add.length}人を追加しました`); },
+  addRoster(d){ const p=roster().find(x=>x.id===d.id); if(!p||members().some(m=>m.id===p.id)) return; let re=false; mutateState(s=>{ re=false; if(s.members.some(m=>m.id===p.id)) return; s.members.push({id:p.id, name:p.name, tb:Math.random()}); re=rescheduleRest(s); }).then(ok=>{ if(ok&&re) toast(`${p.name}が途中参加。残りの出走表を組み直しました`); }); },
+  addAllRoster(){ const add=roster().filter(p=>!members().some(m=>m.id===p.id)); if(!add.length) return; let n=0; mutateState(s=>{ n=0; add.forEach(p=>{ if(s.members.some(m=>m.id===p.id)) return; s.members.push({id:p.id, name:p.name, tb:Math.random()}); n++; }); if(n) rescheduleRest(s); }).then(ok=>{ if(ok&&n) toast(`${n}人を追加しました`); }); },
   delRoster(d){ if(S.ui.confirm!=="del:"+d.id){ S.ui.confirm="del:"+d.id; render(); return; } S.ui.confirm=null; mutateRoster(r=>{ r.players=r.players.filter(p=>p.id!==d.id); }); toast("名簿から消しました（成績は残ります）"); },
   mark(d){ const r=curRace(), me=myMember(); if(!r||!me||!isLive(r)) return;
     mutateBets(S.uid, b=>{ b.member=me; b.marks=b.marks||{}; const mk=b.marks[r.id]=b.marks[r.id]||{};
@@ -2134,10 +2168,15 @@ const A={
   reopen(){ return mutateCurrentRace((s,r)=>{ if(r.status!=="closed") throw writeError("結果確定前の締切だけ取り消せます"); r.status="open"; r.closeAt=null; }); },
   orderPick(d){ const o=S.ui.order, i=o.indexOf(d.id); if(i>=0) o.splice(i,1); else o.push(d.id); render(); },
   orderReset(){ S.ui.order=[]; render(); },
-  confirmResult(){
-    const r=curRace(); if(!S.isOwner||!r||r.status!=="closed") return; let o=[...new Set(S.ui.order.filter(id=>r.runners.includes(id)))];
+  async confirmResult(){
+    const r=curRace(); if(!S.isOwner||!r||r.status!=="closed"||S.ui.settling) return false; let o=[...new Set(S.ui.order.filter(id=>r.runners.includes(id)))];
     if(o.length===r.runners.length-1) o.push(r.runners.find(id=>!o.includes(id)));
     if(o.length!==r.runners.length) return;
+    // 締切間際の票がこの端末にまだ届いていないことがあるので、計算の前にサーバーから全部の票を読み直す。
+    S.ui.settling=true;
+    try{ const q=await S.db.collection("bets").get(); const b={}; q.docs.forEach(d=>{ if(d.exists) b[d.id]=d.data(); }); S.bets=b; }
+    catch(e){ console.error(e); toast("最新の投票を読み込めませんでした。通信を確認してもう一度確定してください"); return false; }
+    finally{ S.ui.settling=false; }
     const rr=clone(r); rr.order=o; const settle=settleRace(rr);
     const pl={}; raceTickets(rr).forEach(t=>pl[t.member]=(pl[t.member]||0)-t.amt);
     for(const [m,a] of Object.entries(settle.payouts)) pl[m]=(pl[m]||0)+a;
@@ -2241,7 +2280,8 @@ const A={
   csvR(){ exportCSV("races"); },
 };
 async function exportCSV(kind){
-  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  // 名前などが =,+,-,@ で始まると表計算ソフトで数式として動くので、先頭に ' を付けて文字として扱わせる。
+  const q=v=>{ let x=String(v??""); if(typeof v==="string"&&/^[=+\-@\t\r]/.test(x)) x="'"+x; return `"${x.replace(/"/g,'""')}"`; };
   let rows=[];
   if(kind==="tickets"){
     rows.push(["race_no","race_type","bettor","market","selection","amount","placed_at","valid","hit","odds","payout","entry"]);
@@ -2312,12 +2352,13 @@ render();
   if(!db){ S.noDb=true; render(); return; }
   S.db=db; S.user=user;
   if(user){ S.uid=await user.id(); S.isOwner=await user.isOwner(); }
-  let got=0; const mark=()=>{ if(++got>=5){ S.ready=true; } render(); };
+  let got=0; const mark=()=>{ if(++got>=6){ S.ready=true; } render(); };
   const once=fn=>{ let first=true; return x=>{ fn(x); if(first){ first=false; mark(); } else render(); }; };
   db.doc("game/state").onSnapshot(once(s=>{ S.state = s.exists ? s.data() : defaultState(); }), e=>console.error(e));
   db.doc("game/ledger").onSnapshot(once(s=>{ S.ledger = s.exists ? s.data() : {entries:[]}; }), e=>console.error(e));
   db.doc("game/roster").onSnapshot(once(s=>{ S.roster = s.exists ? s.data() : {players:[]}; }), e=>console.error(e));
   db.doc("game/history").onSnapshot(once(s=>{ S.history = s.exists ? s.data() : {races:[]}; }), e=>console.error(e));
+  db.doc("game/claims").onSnapshot(once(s=>{ S.claims = s.exists ? s.data() : null; }), e=>console.error(e));
   db.collection("bets").onSnapshot(once(q=>{ const b={}; q.docs.forEach(d=>b[d.id]=d.data()); S.bets=b; }), e=>console.error(e));
 })();
 </script>

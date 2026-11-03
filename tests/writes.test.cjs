@@ -334,3 +334,31 @@ test('adding a member already added on another device does not duplicate it',asy
   assert.equal(a.b.data['game/state'].members.filter(m=>m.name==='山田').length,1);
   assert.match(a.messages.at(-1),/同じ名前/);
 });
+
+test('phone purchase and host proxy purchase at the same time cannot exceed the balance',async()=>{
+  for(const proxyFirst of [false,true]){
+    const b=backend();
+    const phone=await app(b); assert.equal(await phone.A.bet(),true);   // この端末を p5 のスマホとして記録（残り900枚）
+    const host=await app(b); host.S.uid='host'; host.S.bets=clone({device:b.data['bets/device']}); host.S.claims=clone(b.data['game/claims']);
+    phone.S.ui.sel=['p1']; phone.S.ui.amt=600;
+    let release; b.gate=new Promise(r=>release=r);
+    const buyPhone=()=>phone.A.bet();
+    const buyProxy=()=>host.context.saveTicket('proxy',{id:'x1',race:'r1',member:'p5',m:'win',sel:['p2'],amt:600},false).then(ok=>ok);
+    const runs=proxyFirst?[buyProxy(),buyPhone()]:[buyPhone(),buyProxy()];
+    await new Promise(setImmediate); release(); const res=await Promise.all(runs);
+    const spent=[...(b.data['bets/device'].tickets||[]),...((b.data['bets/proxy']||{}).tickets||[])].filter(t=>t.member==='p5').reduce((a,t)=>a+t.amt,0);
+    assert.equal(res.filter(Boolean).length,1,`proxyFirst=${proxyFirst}`);
+    assert.ok(spent<=1000,`spent ${spent}`);
+  }
+});
+
+test('proxy purchase is retried safely when the member starts using a phone at the same moment',async()=>{
+  const b=backend();
+  const host=await app(b); host.S.uid='host'; host.S.claims=null;
+  const phone=await app(b); phone.S.ui.amt=600;
+  let release; b.gate=new Promise(r=>release=r);
+  const p1=phone.A.bet(), p2=host.context.saveTicket('proxy',{id:'x1',race:'r1',member:'p5',m:'win',sel:['p2'],amt:600},false);
+  await new Promise(setImmediate); release(); const res=await Promise.all([p1,p2]);
+  const spent=[...(b.data['bets/device'].tickets||[]),...((b.data['bets/proxy']||{}).tickets||[])].reduce((a,t)=>a+t.amt,0);
+  assert.ok(spent<=1000,`spent ${spent}`); assert.equal(res.filter(Boolean).length,1);
+});

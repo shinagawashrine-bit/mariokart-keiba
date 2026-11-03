@@ -284,3 +284,53 @@ test('creating the schedule moves the host from setup to live control',async()=>
   assert.equal(a.b.data['game/state'].races.length,3);
   assert.equal(a.b.data['game/state'].races[0].status,'open');
 });
+
+test('one member can buy from only one phone; a second phone is rejected',async()=>{
+  const b=backend();
+  const a=await app(b);
+  assert.equal(await a.A.bet(),true);
+  assert.equal(b.data['game/claims'].m.p5,'device');
+  // 別の端末が同じ名前で買おうとしても、記録された端末以外は拒否される。
+  b.data['bets/other']={member:'p5',tickets:[]};
+  const c=await app(b); c.S.uid='other'; c.S.bets={other:clone(b.data['bets/other'])};
+  assert.equal(await c.A.bet(),false);
+  assert.match(c.messages.at(-1),/別のスマホ/);
+  assert.equal(b.data['bets/other'].tickets.length,0);
+});
+
+test('choosing a name moves it to this phone and the old phone loses it',async()=>{
+  const b=backend();
+  const a=await app(b); assert.equal(await a.A.bet(),true);
+  b.data['bets/other']={tickets:[]};
+  const c=await app(b); c.S.uid='other'; c.S.bets={other:clone(b.data['bets/other'])};
+  await c.A.claim({id:'p5'}); await new Promise(setImmediate);
+  assert.equal(b.data['game/claims'].m.p5,'other');
+  assert.equal(b.data['bets/other'].member,'p5');
+  a.S.ui.sel=['p1']; assert.equal(await a.A.bet(),false);
+});
+
+test('result uses every ticket on the server, including ones this host has not received',async()=>{
+  const a=await app(); closed(a);
+  // 管理端末に届いていない票（締切直前に入った票）
+  a.b.data['bets/late']={member:'p5',tickets:[{id:'t9',race:'r1',member:'p5',m:'win',sel:['p1'],amt:100,t:Date.now()-1000}]};
+  assert.equal(await a.A.confirmResult(),true);
+  const settle=a.b.data['game/state'].races[0].settle;
+  assert.equal(settle.hits.length,1);
+  assert.ok(settle.payouts.p5>0);
+});
+
+test('a phone that missed the end notice cannot buy after the event ended',async()=>{
+  const a=await app(); a.b.data['game/state'].ended=Date.now();
+  assert.equal(await a.A.bet(),false);
+  assert.match(a.messages.at(-1),/受付は終了/);
+  assert.equal(a.b.data['bets/device'].tickets.length,0);
+});
+
+test('adding a member already added on another device does not duplicate it',async()=>{
+  const a=await app();
+  a.b.data['game/state'].members.push({id:'p6',name:'山田'});
+  a.S.ui.form.newName='山田';
+  await a.A.addMember(); await new Promise(setImmediate); await new Promise(setImmediate);
+  assert.equal(a.b.data['game/state'].members.filter(m=>m.name==='山田').length,1);
+  assert.match(a.messages.at(-1),/同じ名前/);
+});

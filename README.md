@@ -2,9 +2,9 @@
 
 友達同士でマリオカートにチップを賭ける、競馬風のWebアプリ。
 
-- 投票用（みんなに配る）：https://shinagawashrine-bit.github.io/mariokart-keiba/#bet
-- 大画面用（オッズ画面）：https://shinagawashrine-bit.github.io/mariokart-keiba/#board
-- 管理用（主催者専用・暗証番号あり）：https://shinagawashrine-bit.github.io/mariokart-keiba/#admin
+- スマホ用（みんなに配る）：https://shinagawashrine-bit.github.io/mariokart-keiba/#bet
+- 大画面：https://shinagawashrine-bit.github.io/mariokart-keiba/#board
+- 管理画面（主催者専用・暗証番号あり）：https://shinagawashrine-bit.github.io/mariokart-keiba/#admin
 - 成績表：https://shinagawashrine-bit.github.io/mariokart-keiba/#stats
 
 ## 仕組み
@@ -44,7 +44,7 @@ python3 tests/browser_smoke.py
 
 ## 管理画面
 
-最初のシステムの配色・ボタン・パネルを維持し、「準備」「開催中」「終了後」の切り替えを追加している。開催中は元のレース進行・出走表・代理入力を表示し、チップ調整とURLは必要なときに開く。スマホの投票画面は従来の配置を維持している。
+最初のシステムの配色・ボタン・パネルを維持し、「準備」「開催中」「終了後」の切り替えを追加している。開催中は元のレース進行・出走表・代理入力を表示し、チップ調整とURLは必要なときに開く。スマホ用は従来の配置を維持している。
 
 終了後の最終チップ表を閉じても当日のデータは残る。初期化は「終了後」→「次の開催を準備」から明示的に行う。CSV保存が失敗した場合、「保存して終了」は大会を終了しない。
 
@@ -57,7 +57,7 @@ KEIBA_SCREENSHOT_DIR=/tmp/mariokart-admin-screenshots python3 tests/browser_smok
 
 ## スマホのキャラクター表示
 
-投票画面では `assets/kart-characters.png` のキャラクター画像を使う。SVGの `preserveAspectRatio="xMidYMid meet"` で全体を収め、帽子やタイヤが表示枠で切れないようにする。画像内の元のUIラベルはクリップして表示しない。大画面側は従来のカートを維持する。
+スマホ用では `assets/kart-characters.png` のキャラクター画像を使う。SVGの `preserveAspectRatio="xMidYMid meet"` で全体を収め、帽子やタイヤが表示枠で切れないようにする。画像内の元のUIラベルはクリップして表示しない。大画面側は従来のカートを維持する。
 
 実アプリと独立デモの表示・投票・取消・リセット、360/390/414px幅での画像の収まりは `python3 tests/character_demo.py` で確認できる。実アプリの検証ではFirebaseをローカルのテストダブルに差し替える。
 

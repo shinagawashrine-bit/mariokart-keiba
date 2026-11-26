@@ -1,6 +1,6 @@
 # キャラクター表示デモ
 
-スマホの投票画面のカートをキャラクター画像に差し替えた、独立した試作用ページ。
+スマホ用のカートをキャラクター画像に差し替えた、独立した試作用ページ。
 
 - URL: `https://shinagawashrine-bit.github.io/mariokart-keiba/demo/characters/#bet`
 - 投票、取消、券種変更、枚数変更を試せる。

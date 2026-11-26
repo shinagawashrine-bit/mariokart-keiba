@@ -1529,7 +1529,7 @@ function renderNoDb(){
 /* ===== BOARD ===== */
 function renderBoard(){
   const r=curRace();
-  if(!r) return `<div class="board wrap"><div class="checker"></div><div class="bhead">${logo()}</div>
+  if(!r) return `<div class="board wrap"><div class="checker"></div><div class="bhead"><div class="btitle">${logo()}</div><div class="row">${fsBtn()}${soundBtn()}</div></div>
     <div class="panel" style="text-align:center;padding:60px 16px"><h1 style="font-size:40px">まもなくスタート</h1><p class="muted">管理画面でメンバーを登録して、出走表を作ってください</p></div>${boardQR()}</div>`;
   const tix=raceTickets(r), O=computeOdds(r,tix); trackFlash(O, r.id);
   const rank=popularity(r,O), W=O.pools.win.total, rem=remain(r), MA=marksAgg(r);
